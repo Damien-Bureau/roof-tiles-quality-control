@@ -1,5 +1,8 @@
 # Version 4
 
+import sys
+import os
+
 import time as t
 import datetime as dt
 
@@ -11,7 +14,6 @@ import csv
 import sounddevice as sd # record audio
 import scipy # save audio in a file
 
-import sys
 from get_input_devices import get_input_devices_list, set_default_device
 
 
@@ -82,6 +84,12 @@ def red_btn_pressed():
 def get_datetime():
     raw_datetime = dt.datetime.now()
     return raw_datetime.strftime("%Y%m%d_%H-%M-%S")
+
+
+def check_folder(folder_name):
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+        print(f'Created folder "{folder_name}"')
 
 
 def write_csv_row(filename: str, data: list):
@@ -212,6 +220,7 @@ sense.low_light = False
 ## FILE MANAGEMENT
 REC_DURATION = 60 # new file every [...] seconds
 FILE_PATH = "events_files/"
+check_folder(FILE_PATH)
 
 
 ## AUDIO RECORDING
