@@ -172,6 +172,7 @@ def stop_recording():
         f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(25-len(get_record_duration(str_format=True)))} ##"
         f"\n{'#'*83}\n"
         )
+    print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m", end="")
     audio = []
     led_white_cross()
 #     visualize_audio_and_events(filename, AMPLITUDE_THRESHOLD)
@@ -284,6 +285,7 @@ print(
     "\n----------------------------"
 )
 print(f"\nCurrent state: \033[1;4m{state.upper()}\033[0m\n")
+print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m", end="")
 
 
 ### MAIN LOOP
@@ -299,15 +301,11 @@ while True:
         # GREEN button held: start recording if it's a long press
         if green_btn_state == 1 and green_btn_last_state == 1:
             button_press_duration = t.monotonic() - button_press_start_time
-            print(f"\033[2mPress the green button to start recording:\033[0m \033[32m{button_press_duration:.1f}s\033[0m ({LONG_PRESS_DURATION}s)\r", end="")
             if button_press_duration > LONG_PRESS_DURATION:
                 clear_console_line()
                 start_recording()
-        else:
-            print(f"\r\033[2mPress the green button to start recording:\033[0m ---- ({LONG_PRESS_DURATION}s)\r", end="")
         
         green_btn_last_state = green_btn_state
-        t.sleep(0.05)
     
     while state == "recording":
         
