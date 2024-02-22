@@ -15,10 +15,14 @@ import sounddevice as sd # record audio
 import scipy # save audio in a file
 
 from get_input_devices import get_input_devices_list, set_default_device
+from visualize_audio_file import visualize_audio_file, visualize_audio_and_events
 
 
 def led_fully_white():
     sense.set_pixels([WHITE_RGB]*64)
+
+def led_fully_red():
+    sense.set_pixels([RED_RGB]*64)
 
 def led_white_cross():
     sense.clear()
@@ -58,6 +62,10 @@ def led_outline(color):
 
 def clear_console_line():
     print(f"\r{' '*100}\r", end="")
+
+
+def is_microphone_connected():
+    return os.path.exists("/dev/hidraw1")
 
 
 def read_button(button_pin: int):
@@ -183,7 +191,7 @@ def stop_recording():
     print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m", end="")
     audio = []
     led_white_cross()
-#     visualize_audio_and_events(filename, AMPLITUDE_THRESHOLD)
+#     visualize_audio_and_events(filename, AMPLITUDE_THRESHOLD, files_path="events_files")
 
 
 def start_new_file():
@@ -214,7 +222,7 @@ WHITE_RGB = (255, 255, 255)
 
 sense = SenseHat()
 sense.clear()
-sense.low_light = False
+sense.low_light = True
 
 
 ## FILE MANAGEMENT
@@ -282,6 +290,19 @@ green_btn_press_timestamp = 0
 red_btn_press_timestamp = 0
 last_hit_timestamp = 0
 
+
+## CHECKS IF MICROPHONE IS CONNECTED
+while not(is_microphone_connected()):
+    for i in range(3):
+        led_fully_red()
+        t.sleep(0.1)
+        sense.clear()
+        t.sleep(0.25)
+    sense.show_message("No mic")
+    t.sleep(0.5)
+
+
+## LAUNCH
 
 state = "not recording"
 led_white_cross()
