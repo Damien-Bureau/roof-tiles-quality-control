@@ -16,6 +16,7 @@ import scipy # save audio in a file
 
 from get_input_devices import get_input_devices_list, set_default_device
 from visualize_audio_file import visualize_audio_file, visualize_audio_and_events
+from microphone import find_microphone
 
 
 def led_fully_white():
@@ -86,7 +87,7 @@ def clear_console_line():
 
 
 def is_microphone_connected():
-    return os.path.exists("/dev/hidraw0")
+    return find_microphone()
 
 
 def read_button(button_pin: int):
