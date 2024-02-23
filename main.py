@@ -16,7 +16,7 @@ import scipy # save audio in a file
 
 from get_input_devices import get_input_devices_list, set_default_device
 from visualize_audio_file import visualize_audio_file, visualize_audio_and_events
-from microphone import find_microphone
+from devices import find_microphone, find_storage_device
 
 
 def led_fully_white():
@@ -74,6 +74,32 @@ def led_no_mic():
         O, X, O, C, C, O, O, O,
         X, O, C, C, C, C, O, O]
     sense.set_pixels(matrix)
+
+def led_no_storage_device():
+    X = RED_RGB
+    O = VOID_RGB
+    C = WHITE_RGB
+    matrix = [
+        O, O, O, C, C, O, O, X,
+        O, O, O, C, C, O, X, O,
+        O, O, O, C, C, X, O, O,
+        O, C, O, C, X, O, C, O,
+        O, O, C, X, C, C, O, O,
+        C, O, X, C, C, O, O, C,
+        C, X, O, O, O, O, O, C,
+        X, C, C, C, C, C, C, C]
+    sense.set_pixels(matrix)
+
+
+def led_error_animation(error):
+    if error == "mic":
+        image = led_no_mic
+    elif error == "storage":
+        image = led_no_storage_device
+    led_fully_red()
+    t.sleep(0.5)
+    image()
+    t.sleep(1)
 
 
 def error(message):
@@ -253,15 +279,30 @@ def check_microphone(*args):
         last_screen_shown = False
         print(f"\rMicrophone not connected! {' '*100}\r", end="")
         while not(is_microphone_connected()): # show animation on LED screen
+            led_error_animation(error="mic")
+            '''
             led_fully_red()
             t.sleep(0.5)
             led_no_mic()
-            t.sleep(1)
+            t.sleep(1)'''
     if args and not(last_screen_shown): # if a LED display function is given (last screen)
         clear_console_line()
         args[0]()
         last_screen_shown = True
 
+def check_storage_device(*args):
+    global last_screen_shown, storage_device_name
+    if find_storage_device() == None:
+        last_screen_shown = False
+        print(f"\rNo storage device! {' '*100}\r", end="")
+        while find_storage_device() == None:
+            led_error_animation(error="storage")
+    if args and not(last_screen_shown):
+        clear_console_line()
+        args[0]()
+        last_screen_shown = True
+    storage_device_name = find_storage_device()
+        
 
 def audio_callback(indata, frames, time, status):
     global audio, samples_counter
@@ -350,11 +391,15 @@ last_hit_timestamp = 0
 ## LAUNCH
 last_screen_shown = False
 check_microphone(led_white_cross)
+storage_device_name = None
+check_storage_device()
 state = "not recording"
 
 print(
     "\n----------------------------\n"
-    f"\033[1mDevice\033[0m: {device_name}\n"
+    f"\033[1mStorage device\033[0m: {storage_device_name}"
+    "\n----------------------------\n"
+    f"\033[1mAudio device\033[0m: {device_name}\n"
     f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
     f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}"
     "\n----------------------------"
