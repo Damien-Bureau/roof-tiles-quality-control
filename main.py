@@ -59,13 +59,34 @@ def led_outline(color):
         O, O, O, O, O, O, O, O]
     sense.set_pixels(matrix)
 
+def led_no_mic():
+    X = RED_RGB
+    O = VOID_RGB
+    C = WHITE_RGB
+    matrix = [
+        O, O, O, C, C, O, O, X,
+        O, O, O, C, C, O, X, O,
+        O, C, O, C, C, X, C, O,
+        O, C, O, C, X, O, C, O,
+        O, C, O, X, O, O, C, O,
+        O, O, X, C, C, C, O, O,
+        O, X, O, C, C, O, O, O,
+        X, O, C, C, C, C, O, O]
+    sense.set_pixels(matrix)
+
+
+def error(message):
+    print(f"\033[97;101m {message} \033[0m")
+
+def info(message):
+    print(f"\033[97;46m {message} \033[0m")
 
 def clear_console_line():
     print(f"\r{' '*100}\r", end="")
 
 
 def is_microphone_connected():
-    return os.path.exists("/dev/hidraw1")
+    return os.path.exists("/dev/hidraw0")
 
 
 def read_button(button_pin: int):
@@ -132,6 +153,8 @@ def lowpass(data: list, cutoff: float, sample_rate: float, poles: int=5):
 def hit_detection(data: list):
     global last_hit, hits_detected, hit_i
     data = data[-HIT_DETECTION_ON_N_SAMPLES:]
+#     if len(data) < HIT_DETECTION_ON_N_SAMPLES:
+#         error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})")
     start_index = len(audio) - HIT_DETECTION_ON_N_SAMPLES
     filtered_data = lowpass(data, cutoff=CUTOFF_FREQUENCY, sample_rate=SAMPLE_RATE)
     hits_detected = []
@@ -166,6 +189,7 @@ def start_recording():
     filename = get_datetime()
     write_csv_row(f"{FILE_PATH}{filename}.csv", [0, "on"]) # starts a new csv file
     audio = []
+    samples_counter = 0
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
     stream.start()
     led_fully_white()
@@ -176,27 +200,36 @@ def start_recording():
         )
 
 
-def stop_recording():
+def stop_recording(reason="red button long press"):
     global state, audio
     state = "not recording"
     stream.stop()
     write_csv_row(f"{FILE_PATH}{filename}.csv", [get_record_duration(str_format=True), "off"])
-    save_audio_file(path=FILE_PATH, filename=filename, data=lowpass(audio, cutoff=CUTOFF_FREQUENCY, sample_rate=SAMPLE_RATE))
-    print(
-        f"\n{'#'*83}"
-        f"\n##  Red button was pressed for {button_press_duration:.2f}s, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
-        f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(25-len(get_record_duration(str_format=True)))} ##"
-        f"\n{'#'*83}\n"
-        )
+    save_audio_file(path=FILE_PATH, filename=filename, data=audio)
+    if reason == "red button long press":
+        print(
+            f"\n{'#'*83}"
+            f"\n##  Red button was pressed for {button_press_duration:.2f}s, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+            f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(25-len(get_record_duration(str_format=True)))} ##"
+            f"\n{'#'*83}\n"
+            )
+    elif reason == "microphone disconnected":
+        print(
+            f"\n{'#'*78}"
+            f"\n##  Microphone was disconnected, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+            f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(20-len(get_record_duration(str_format=True)))} ##"
+            f"\n{'#'*78}\n"
+            )
     print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m", end="")
     audio = []
+    samples_counter = 0
     led_white_cross()
 #     visualize_audio_and_events(filename, AMPLITUDE_THRESHOLD, files_path="events_files")
 
 
 def start_new_file():
     global audio, filename, green_btn_press_timestamp, red_btn_press_timestamp
-    save_audio_file(path=FILE_PATH, filename=filename, data=lowpass(audio, cutoff=CUTOFF_FREQUENCY, sample_rate=SAMPLE_RATE))
+    save_audio_file(path=FILE_PATH, filename=filename, data=audio)
     print(
         f"\n{'#'*62}"
         f"\n##  The record started {get_record_duration():.2f}s ago, time to make a new one!  ##"
@@ -205,7 +238,28 @@ def start_new_file():
         )
     filename = get_datetime()
     audio = []
+    samples_counter = 0
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
+
+
+def check_microphone(*args):
+    global last_screen_shown
+    if not(is_microphone_connected()):
+        try:
+            stop_recording(reason="microphone disconnected")
+        except NameError: # if it's not recording
+            pass
+        last_screen_shown = False
+        print(f"\rMicrophone not connected! {' '*100}\r", end="")
+        while not(is_microphone_connected()): # show animation on LED screen
+            led_fully_red()
+            t.sleep(0.5)
+            led_no_mic()
+            t.sleep(1)
+    if args and not(last_screen_shown): # if a LED display function is given (last screen)
+        clear_console_line()
+        args[0]()
+        last_screen_shown = True
 
 
 def audio_callback(indata, frames, time, status):
@@ -253,6 +307,7 @@ sd.default.samplerate = SAMPLE_RATE
 sd.default.channels = 1 # 1 for mono, 2 for stereo
 
 stream = sd.InputStream(callback=audio_callback)
+stream.abort()
 
 audio = []
 
@@ -291,21 +346,10 @@ red_btn_press_timestamp = 0
 last_hit_timestamp = 0
 
 
-## CHECKS IF MICROPHONE IS CONNECTED
-while not(is_microphone_connected()):
-    for i in range(3):
-        led_fully_red()
-        t.sleep(0.1)
-        sense.clear()
-        t.sleep(0.25)
-    sense.show_message("No mic")
-    t.sleep(0.5)
-
-
 ## LAUNCH
-
+last_screen_shown = False
+check_microphone(led_white_cross)
 state = "not recording"
-led_white_cross()
 
 print(
     "\n----------------------------\n"
@@ -321,6 +365,8 @@ print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start record
 ### MAIN LOOP
 while True:
     while state == "not recording":
+        
+        check_microphone(led_white_cross)
         
         green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
         
@@ -338,6 +384,8 @@ while True:
         green_btn_last_state = green_btn_state
     
     while state == "recording":
+        
+        check_microphone(led_white_cross)
         
         green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
         red_btn_state = read_button(button_pin=RED_BTN_PIN)
@@ -364,6 +412,7 @@ while True:
         
         # Doing hit detection when DURATION_BETWEEN_HIT_DETECTION is reached
         if samples_to_seconds(samples_counter) > DURATION_BETWEEN_HIT_DETECTION:
+#             info(f"{samples_counter} samples = {samples_to_seconds(samples_counter):.3f}s")
             samples_counter = 0
             hit_detection(data=audio)
             read_and_store_hits_detected()
