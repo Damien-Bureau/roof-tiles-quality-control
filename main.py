@@ -182,8 +182,8 @@ def lowpass(data: list, cutoff: float, sample_rate: float, poles: int=5):
 def hit_detection(data: list):
     global last_hit, hits_detected, hit_i
     data = data[-HIT_DETECTION_ON_N_SAMPLES:]
-#     if len(data) < HIT_DETECTION_ON_N_SAMPLES:
-#         error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})")
+    if len(data) < HIT_DETECTION_ON_N_SAMPLES:
+        error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})")
     start_index = len(audio) - HIT_DETECTION_ON_N_SAMPLES
     filtered_data = lowpass(data, cutoff=CUTOFF_FREQUENCY, sample_rate=SAMPLE_RATE)
     hits_detected = []
@@ -212,7 +212,7 @@ def read_and_store_hits_detected():
 
 
 def start_recording():
-    global state, filename, nothing_happened_feedback_shown, audio, green_btn_press_timestamp, red_btn_press_timestamp
+    global state, filename, nothing_happened_feedback_shown, audio, samples_counter, green_btn_press_timestamp, red_btn_press_timestamp
     state = "recording"
     nothing_happened_feedback_shown = True
     filename = get_datetime()
@@ -230,11 +230,13 @@ def start_recording():
 
 
 def stop_recording(reason="red button long press"):
-    global state, audio
+    global state, audio, samples_counter
     state = "not recording"
-    stream.stop()
-    write_csv_row(f"{FILE_PATH}{filename}.csv", [get_record_duration(str_format=True), "off"])
-    save_audio_file(path=FILE_PATH, filename=filename, data=audio)
+    try:
+        write_csv_row(f"{FILE_PATH}{filename}.csv", [get_record_duration(str_format=True), "off"])
+        save_audio_file(path=FILE_PATH, filename=filename, data=audio)
+    except FileNotFoundError: # storage device disconnected
+        pass
     if reason == "red button long press":
         print(
             f"\n{'#'*83}"
@@ -249,7 +251,15 @@ def stop_recording(reason="red button long press"):
             f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(20-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*78}\n"
             )
-    print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m", end="")
+    elif reason == "storage device disconnected" and stream.active == True:
+        print(
+            f"\n{'#'*82}"
+            f"\n##  Storage device was disconnected, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+            f"\n##  Unable to save files {filename} ({get_record_duration(str_format=True)}s) {' '*(32-len(get_record_duration(str_format=True)))} ##"
+            f"\n{'#'*82}\n"
+            )
+    print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m")#, end="")
+    stream.stop()
     audio = []
     samples_counter = 0
     led_white_cross()
@@ -257,7 +267,7 @@ def stop_recording(reason="red button long press"):
 
 
 def start_new_file():
-    global audio, filename, green_btn_press_timestamp, red_btn_press_timestamp
+    global audio, samples_counter, filename, green_btn_press_timestamp, red_btn_press_timestamp
     save_audio_file(path=FILE_PATH, filename=filename, data=audio)
     print(
         f"\n{'#'*62}"
@@ -272,7 +282,7 @@ def start_new_file():
 
 
 def check_microphone(*args):
-    global last_screen_shown
+    global last_screen_shown, audio, samples_counter
     if not(is_microphone_connected()):
         try:
             stop_recording(reason="microphone disconnected")
@@ -287,25 +297,34 @@ def check_microphone(*args):
             t.sleep(0.5)
             led_no_mic()
             t.sleep(1)'''
-    if args and not(last_screen_shown): # if a LED display function is given (last screen)
+    if args and not(last_screen_shown): # if the mic is connected again and if a LED display function is given (last screen)
+        audio = []
+        samples_counter = 0
         clear_console_line()
         args[0]()
         last_screen_shown = True
 
-'''
+
 def check_storage_device(*args):
-    global last_screen_shown, storage_device_name
+    global last_screen_shown, storage_device_name, audio, samples_counter
     if find_storage_device() == None:
+        try:
+            stop_recording(reason="storage device disconnected")
+        except NameError: # if stream isn't defined (at the first launch)
+            pass
         last_screen_shown = False
         print(f"\rNo storage device! {' '*100}\r", end="")
         while find_storage_device() == None:
             led_error_animation(error="storage")
-    if args and not(last_screen_shown):
+    if args and not(last_screen_shown): # storage device connected again
+        audio = []
+        samples_counter = 0
         clear_console_line()
-        args[0]()
+        args[0]() # last screen
+        check_folder(FILE_PATH)
         last_screen_shown = True
     storage_device_name = find_storage_device()
-'''
+
 
 def audio_callback(indata, frames, time, status):
     global audio, samples_counter
@@ -324,17 +343,17 @@ sense.clear()
 sense.low_light = True
 
 
-## FILE MANAGEMENT
-REC_DURATION = 60 # new file every [...] seconds
-FILE_PATH = "events_files/"
-check_folder(FILE_PATH)
-
-
 ## DEVICES VERIFICATIONS
 last_screen_shown = False
 check_microphone(led_white_cross) # doesn't start the stream if there's no audio device
 storage_device_name = None
-# check_storage_device()
+check_storage_device()
+
+
+## FILE MANAGEMENT
+REC_DURATION = 60 # new file every [...] seconds
+FILE_PATH = f"/media/pi/{storage_device_name}/events_files/"
+check_folder(FILE_PATH)
 
 
 ## AUDIO RECORDING
@@ -411,7 +430,7 @@ print(
     "\n----------------------------"
 )
 print(f"\nCurrent state: \033[1;4m{state.upper()}\033[0m\n")
-print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m", end="")
+print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m") #, end="")
 
 
 ### MAIN LOOP
@@ -419,6 +438,7 @@ while True:
     while state == "not recording":
         
         check_microphone(led_white_cross)
+        check_storage_device(led_white_cross)
         
         green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
         
@@ -438,6 +458,7 @@ while True:
     while state == "recording":
         
         check_microphone(led_white_cross)
+        check_storage_device(led_white_cross)
         
         green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
         red_btn_state = read_button(button_pin=RED_BTN_PIN)
@@ -464,7 +485,7 @@ while True:
         
         # Doing hit detection when DURATION_BETWEEN_HIT_DETECTION is reached
         if samples_to_seconds(samples_counter) > DURATION_BETWEEN_HIT_DETECTION:
-#             info(f"{samples_counter} samples = {samples_to_seconds(samples_counter):.3f}s")
+            info(f"{samples_counter} samples = {samples_to_seconds(samples_counter):.3f}s")
             samples_counter = 0
             hit_detection(data=audio)
             read_and_store_hits_detected()

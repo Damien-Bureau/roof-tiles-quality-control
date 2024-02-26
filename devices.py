@@ -30,7 +30,7 @@ def set_default_audio_input_device(device_index):
 
 
 def find_microphone():
-    mic_name = "USB_PnP_Sound_Device"
+    mic_name = "USB_PnP_Sound_Device" # to change if a different microphone is used
     mic_connected = False
 
     context = pyudev.Context()
