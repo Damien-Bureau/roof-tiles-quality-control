@@ -182,8 +182,8 @@ def lowpass(data: list, cutoff: float, sample_rate: float, poles: int=5):
 def hit_detection(data: list):
     global last_hit, hits_detected, hit_i
     data = data[-HIT_DETECTION_ON_N_SAMPLES:]
-    if len(data) < HIT_DETECTION_ON_N_SAMPLES:
-        error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})")
+#     if len(data) < HIT_DETECTION_ON_N_SAMPLES:
+#         error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})")
     start_index = len(audio) - HIT_DETECTION_ON_N_SAMPLES
     filtered_data = lowpass(data, cutoff=CUTOFF_FREQUENCY, sample_rate=SAMPLE_RATE)
     hits_detected = []
@@ -292,17 +292,64 @@ def check_microphone(*args):
         print(f"\rMicrophone not connected! {' '*100}\r", end="")
         while not(is_microphone_connected()): # show animation on LED screen
             led_error_animation(error="mic")
-            '''
-            led_fully_red()
-            t.sleep(0.5)
-            led_no_mic()
-            t.sleep(1)'''
-    if args and not(last_screen_shown): # if the mic is connected again and if a LED display function is given (last screen)
+        # The microphone is connected again
+        audio = []
+        samples_counter = 0
+    if args and not(last_screen_shown): # if a LED display function is given (last screen)
         audio = []
         samples_counter = 0
         clear_console_line()
         args[0]()
         last_screen_shown = True
+        
+
+def print_audio_settings():
+    print(
+        "----------------------------\n"
+        f"\033[1mAudio device\033[0m: {device_name}\n"
+        f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
+        f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}"
+        "\n----------------------------\n"
+    )
+
+def print_storage_device():
+    print(
+        "\n----------------------------\n"
+        f"\033[1mStorage device\033[0m: {storage_device_name}"
+    )
+
+def read_audio_settings():
+    global device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD
+    audio_settings_file = f"/media/pi/{storage_device_name}/audio_settings.csv"
+    if os.path.exists(audio_settings_file):
+        parameters = {}
+        with open(audio_settings_file, mode='r') as csvfile:
+            for line in csvfile:
+                parameter, value = [element.strip() for element in line.split(';')]
+                parameters[parameter] = value
+#         sd.default.device = int(parameters["device"])
+        device_name = parameters["device_name"]
+        CUTOFF_FREQUENCY = int(parameters["cutoff"])
+        AMPLITUDE_THRESHOLD = float(parameters["threshold"])
+    else:
+        device_name = sd.query_devices()[sd.default.device[0]].get('name')
+        CUTOFF_FREQUENCY = 15000 # Hz
+        AMPLITUDE_THRESHOLD = 0.3 # between 0 and 1
+        with open(audio_settings_file, mode='w') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows([
+                ["device", device_name],
+                ["cutoff", CUTOFF_FREQUENCY],
+                ["threshold", AMPLITUDE_THRESHOLD]
+                            ])
+
+
+def storage_device_plugged():
+    FILE_PATH = f"/media/pi/{storage_device_name}/events_files/"
+    print_storage_device()
+    check_folder(FILE_PATH)
+    read_audio_settings()
+    print_audio_settings()
 
 
 def check_storage_device(*args):
@@ -316,13 +363,19 @@ def check_storage_device(*args):
         print(f"\rNo storage device! {' '*100}\r", end="")
         while find_storage_device() == None:
             led_error_animation(error="storage")
-    if args and not(last_screen_shown): # storage device connected again
+        # The storage device is connected again
+        audio = []
+        samples_counter = 0
+        clear_console_line()
+        storage_device_name = find_storage_device()
+        storage_device_plugged()
+    if args and not(last_screen_shown):
         audio = []
         samples_counter = 0
         clear_console_line()
         args[0]() # last screen
-        check_folder(FILE_PATH)
         last_screen_shown = True
+        
     storage_device_name = find_storage_device()
 
 
@@ -352,23 +405,11 @@ check_storage_device()
 
 ## FILE MANAGEMENT
 REC_DURATION = 60 # new file every [...] seconds
-FILE_PATH = f"/media/pi/{storage_device_name}/events_files/"
-check_folder(FILE_PATH)
+FILE_PATH = f"/media/pi/{storage_device_name}/events_files/" # /!\ also defined in storage_device_plugged()
 
 
 ## AUDIO RECORDING
-setup_audio = False
-
-if setup_audio:
-    import setup_audio_device as config
-    sd.default.device = config.device.value
-    device_name = config.device_name.value
-    CUTOFF_FREQUENCY = config.cutoff.value
-    AMPLITUDE_THRESHOLD = config.threshold.value
-else:
-    device_name = sd.query_devices()[sd.default.device[0]].get('name')
-    CUTOFF_FREQUENCY = 15000 # Hz
-    AMPLITUDE_THRESHOLD = 0.3 # between 0 and 1
+read_audio_settings()
     
 
 SAMPLE_RATE = 44100 # samples per second
@@ -419,7 +460,7 @@ last_hit_timestamp = 0
 
 ## LAUNCH
 state = "not recording"
-
+'''
 print(
     "\n----------------------------\n"
     f"\033[1mStorage device\033[0m: {storage_device_name}"
@@ -428,7 +469,7 @@ print(
     f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
     f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}"
     "\n----------------------------"
-)
+)'''
 print(f"\nCurrent state: \033[1;4m{state.upper()}\033[0m\n")
 print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m") #, end="")
 
@@ -485,7 +526,7 @@ while True:
         
         # Doing hit detection when DURATION_BETWEEN_HIT_DETECTION is reached
         if samples_to_seconds(samples_counter) > DURATION_BETWEEN_HIT_DETECTION:
-            info(f"{samples_counter} samples = {samples_to_seconds(samples_counter):.3f}s")
+#             info(f"{samples_counter} samples = {samples_to_seconds(samples_counter):.3f}s")
             samples_counter = 0
             hit_detection(data=audio)
             read_and_store_hits_detected()
