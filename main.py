@@ -14,7 +14,6 @@ import csv
 import sounddevice as sd # record audio
 import scipy # save audio in a file
 
-from get_input_devices import get_input_devices_list, set_default_device
 from visualize_audio_file import visualize_audio_file, visualize_audio_and_events
 from devices import find_microphone, find_storage_device
 
@@ -30,6 +29,7 @@ def led_white_cross():
     for i in range(8):
         sense.set_pixel(i,i, 255,255,255)
         sense.set_pixel(7-i,i, 255,255,255)
+
 
 def led_circle(color):
     O = WHITE_RGB
@@ -60,6 +60,7 @@ def led_outline(color):
         O, O, O, O, O, O, O, O]
     sense.set_pixels(matrix)
 
+
 def led_no_mic():
     X = RED_RGB
     O = VOID_RGB
@@ -74,6 +75,7 @@ def led_no_mic():
         O, X, O, C, C, O, O, O,
         X, O, C, C, C, C, O, O]
     sense.set_pixels(matrix)
+
 
 def led_no_storage_device():
     X = RED_RGB
@@ -290,6 +292,7 @@ def check_microphone(*args):
         args[0]()
         last_screen_shown = True
 
+'''
 def check_storage_device(*args):
     global last_screen_shown, storage_device_name
     if find_storage_device() == None:
@@ -302,7 +305,7 @@ def check_storage_device(*args):
         args[0]()
         last_screen_shown = True
     storage_device_name = find_storage_device()
-        
+'''
 
 def audio_callback(indata, frames, time, status):
     global audio, samples_counter
@@ -325,6 +328,13 @@ sense.low_light = True
 REC_DURATION = 60 # new file every [...] seconds
 FILE_PATH = "events_files/"
 check_folder(FILE_PATH)
+
+
+## DEVICES VERIFICATIONS
+last_screen_shown = False
+check_microphone(led_white_cross) # doesn't start the stream if there's no audio device
+storage_device_name = None
+# check_storage_device()
 
 
 ## AUDIO RECORDING
@@ -389,10 +399,6 @@ last_hit_timestamp = 0
 
 
 ## LAUNCH
-last_screen_shown = False
-check_microphone(led_white_cross)
-storage_device_name = None
-check_storage_device()
 state = "not recording"
 
 print(
