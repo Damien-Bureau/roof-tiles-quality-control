@@ -2,6 +2,7 @@
 
 import sys
 import os
+import shutil
 
 import time as t
 import datetime as dt
@@ -14,9 +15,9 @@ import csv
 import sounddevice as sd # record audio
 import scipy # save audio in a file
 
-from visualize_audio_file import visualize_audio_file, visualize_audio_and_events
-from devices import find_microphone, find_storage_device
 
+from devices import find_microphone, find_storage_device
+from shell_functions import error, info, clear_console_line, print_audio_settings, print_storage_device
 
 def led_fully_white():
     sense.set_pixels([WHITE_RGB]*64)
@@ -102,16 +103,6 @@ def led_error_animation(error):
     t.sleep(0.5)
     image()
     t.sleep(1)
-
-
-def error(message):
-    print(f"\033[97;101m {message} \033[0m")
-
-def info(message):
-    print(f"\033[97;46m {message} \033[0m")
-
-def clear_console_line():
-    print(f"\r{' '*100}\r", end="")
 
 
 def is_microphone_connected():
@@ -303,53 +294,54 @@ def check_microphone(*args):
         last_screen_shown = True
         
 
-def print_audio_settings():
-    print(
-        "----------------------------\n"
-        f"\033[1mAudio device\033[0m: {device_name}\n"
-        f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
-        f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}"
-        "\n----------------------------\n"
-    )
-
-def print_storage_device():
-    print(
-        "\n----------------------------\n"
-        f"\033[1mStorage device\033[0m: {storage_device_name}"
-    )
-
 def read_audio_settings():
     global device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD
     audio_settings_file = f"/media/pi/{storage_device_name}/audio_settings.csv"
-    if os.path.exists(audio_settings_file):
-        parameters = {}
-        with open(audio_settings_file, mode='r') as csvfile:
-            for line in csvfile:
-                parameter, value = [element.strip() for element in line.split(';')]
-                parameters[parameter] = value
-#         sd.default.device = int(parameters["device"])
-        device_name = parameters["device_name"]
-        CUTOFF_FREQUENCY = int(parameters["cutoff"])
-        AMPLITUDE_THRESHOLD = float(parameters["threshold"])
-    else:
+    audio_settings_file_found = os.path.exists(audio_settings_file)
+    if audio_settings_file_found == True:
+        error_while_reading_audio_settings = False
+        try:
+            parameters = {}
+            with open(audio_settings_file, mode='r') as csvfile:
+                for line in csvfile:
+                    parameter, value = [element.strip() for element in line.split(';')]
+                    parameters[parameter] = value
+    #         sd.default.device = int(parameters["device"])
+            device_name = parameters["device_name"]
+            CUTOFF_FREQUENCY = int(parameters["cutoff"])
+            AMPLITUDE_THRESHOLD = float(parameters["threshold"])
+            print("Audio settings file found")
+        except: # error while reading file
+            error_while_reading_audio_settings = True
+            unreadable_audio_settings_file = f"/media/pi/{storage_device_name}/unreadable_audio_settings.csv"
+            with open(unreadable_audio_settings_file, mode='w'):
+                pass
+            shutil.copy(audio_settings_file, unreadable_audio_settings_file)
+            print("Error while reading audio settings file")
+            
+    if audio_settings_file_found == False or error_while_reading_audio_settings == True:
         device_name = sd.query_devices()[sd.default.device[0]].get('name')
         CUTOFF_FREQUENCY = 15000 # Hz
         AMPLITUDE_THRESHOLD = 0.3 # between 0 and 1
         with open(audio_settings_file, mode='w') as csvfile:
-            writer = csv.writer(csvfile)
+            writer = csv.writer(csvfile, delimiter=';')
             writer.writerows([
-                ["device", device_name],
+                ["device_name", device_name],
                 ["cutoff", CUTOFF_FREQUENCY],
-                ["threshold", AMPLITUDE_THRESHOLD]
-                            ])
+                ["threshold", AMPLITUDE_THRESHOLD]])
+        if audio_settings_file_found == False:
+            print("No audio settings file found")
+        elif error_while_reading_audio_settings == True:
+            print("Unreadable settings copied to another file: unreadable_audio_settings.csv")
+        print("Created a new audio settings file with default settings")
 
 
 def storage_device_plugged():
     FILE_PATH = f"/media/pi/{storage_device_name}/events_files/"
-    print_storage_device()
+    print_storage_device(storage_device_name)
     check_folder(FILE_PATH)
     read_audio_settings()
-    print_audio_settings()
+    print_audio_settings(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD)
 
 
 def check_storage_device(*args):
