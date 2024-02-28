@@ -9,7 +9,7 @@ import sounddevice as sd
 import scipy
 
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 
 import multiprocessing as mpr
 import ctypes
@@ -70,9 +70,8 @@ def update_plot(frame):
 
 
 ## Save audio settings
-def save_settings_in_file():
-    storage_device_name = "USB DAMIEN"
-    audio_settings_file = f"/media/pi/{storage_device_name}/audio_settings.csv"
+def save_settings_in_file(location=f"/media/pi/USB DAMIEN"):
+    audio_settings_file = f"{location}/audio_settings.csv"
     with open(audio_settings_file, mode='w', newline='') as csvfile:
         writer = csv.writer(csvfile, delimiter=';')
         writer.writerows([
@@ -80,6 +79,13 @@ def save_settings_in_file():
             ["cutoff", int(cutoff.value)],
             ["threshold", float(threshold.value)]])
 
+def choose_location_to_save():
+    location = filedialog.askdirectory()
+    if location:
+        return location
+    else:
+        return None
+        dialog.destroy
 
 ## Tkinter update functions
 
@@ -124,8 +130,10 @@ def close_setup():
     device_name.value = device_var.get()
     cutoff.value = int(slider_cutoff.get())
     threshold.value = slider_threshold.get()
-    
-    save_settings_in_file()
+
+    location = choose_location_to_save()
+    if location != None:
+        save_settings_in_file(location=location)
     
     stream.stop()
     stream.close()
@@ -139,7 +147,7 @@ def validate():
         ("Cutoff", f"{int(slider_cutoff.get())} Hz"),
         ("Threshold", f"{round(slider_threshold.get(), 2)}")
     ]
-    
+    global dialog
     dialog = tk.Toplevel(window, bg=BACKGROUND_COLOR)
     dialog.title("Configuration check")
     
@@ -167,7 +175,10 @@ def validate():
 
 # Tkinter window and main frame
 window = tk.Tk()
-window.geometry('1190x800')
+SCREEN_WIDTH = window.winfo_screenwidth()
+SCREEN_HEIGHT = window.winfo_screenheight()
+
+window.geometry(f'{int(SCREEN_WIDTH*0.8)}x{int(SCREEN_HEIGHT*0.8)}')
 window.title("Microphone Test & Calibration")
 window.configure(bg='white')
 frame = tk.Frame(window, bg='white')
@@ -208,7 +219,7 @@ stream = sd.InputStream(callback=audio_callback)
 ### PLOTS =========================================================================================
 
 # Plot area in the Tkinter window
-fig, (ax_input, ax_filter) = plt.subplots(2,1, sharex=True, figsize=(8,8))
+fig, (ax_input, ax_filter) = plt.subplots(2,1, sharex=True, figsize=(6,6))
 fig.tight_layout(pad=2)
 canvas = FigureCanvasTkAgg(fig, master=frame)
 canvas.draw()
@@ -294,7 +305,7 @@ threshold_label.pack(pady=(40,10))
 slider_threshold.pack()
 tk.Label(options_frame, text="Device selection", font=FONT, bg=BACKGROUND_COLOR).pack(pady=(40, 10))
 devices_frame.pack()
-ok_button.pack(pady=(30,0))
+ok_button.pack(pady=(20,0))
 # size_label.pack()
 
 

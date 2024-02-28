@@ -7,7 +7,7 @@ def get_input_devices_list():
 
 #     print()
     for device in devices:
-        if device.get('max_input_channels') > 0 and device.get('name') != 'pulse':
+        if device.get('max_input_channels') > 0 and device.get('max_output_channels') == 0 and '@System32' not in device['name'] and device.get('name') != 'pulse' :
             device_id = device.get('index')
             device_name = device.get('name')
 #             print(f"Input Device {device_id} - {device_name}")
