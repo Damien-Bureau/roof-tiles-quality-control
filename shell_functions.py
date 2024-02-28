@@ -1,4 +1,4 @@
-
+import sounddevice as sd
 
 
 def error(message):
@@ -14,11 +14,14 @@ def clear_console_line():
 def print_audio_settings(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD):
     print(
         "----------------------------\n"
-        f"\033[1mAudio device\033[0m: {device_name}\n"
+        f"\033[1mConfigured audio device\033[0m: {device_name}\n"
+        f"\033[1mCurrent audio device\033[0m: default\n"
         f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
         f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}"
         "\n----------------------------\n"
     )
+# sd.query_devices()[stream.device]['name']
+# sd.query_devices()[sd.default.device[0]]['name']
 
 def print_storage_device(storage_device_name):
     print(
