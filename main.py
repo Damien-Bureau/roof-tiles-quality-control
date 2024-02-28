@@ -13,10 +13,11 @@ import numpy as np
 import csv
 import sounddevice as sd # record audio
 import scipy # save audio in a file
+import re # find digits in a string
 
 
 from devices import find_microphone, find_storage_device
-from shell_functions import error, info, clear_console_line, print_audio_settings, print_storage_device
+from shell_functions import error, info, clear_console_line, print_config, print_storage_device
 from led_display_functions import (led_fully_white, led_fully_red, led_circle, led_outline, led_white_cross,
                                    led_no_mic, led_no_storage_device, led_error_animation)
 
@@ -55,6 +56,16 @@ def check_folder(folder_name):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
         print(f'Created folder "{folder_name}"')
+
+
+def get_disk_usage(FILE_PATH):
+    total, used, free = shutil.disk_usage(FILE_PATH)
+    return {'total': total, 'used': used, 'free': free}
+    print(total, used, free)
+    
+    
+def enough_space_left(FILE_PATH):
+    return get_disk_usage(FILE_PATH)['free'] > 15000000 # 15 Mo#SIZE_OF_ONE_RECORD
 
 
 def write_csv_row(filename: str, data: list):
@@ -139,11 +150,8 @@ def start_recording():
 def stop_recording(reason="red button long press"):
     global state, audio, samples_counter
     state = "not recording"
-    try:
-        write_csv_row(f"{FILE_PATH}{filename}.csv", [get_record_duration(str_format=True), "off"])
-        save_audio_file(path=FILE_PATH, filename=filename, data=audio)
-    except FileNotFoundError: # storage device disconnected
-        pass
+    event_name = "off"
+    
     if reason == "red button long press":
         print(
             f"\n{'#'*83}"
@@ -152,6 +160,15 @@ def stop_recording(reason="red button long press"):
             f"\n{'#'*83}\n"
             )
     elif reason == "microphone disconnected":
+        event_name = "mic_error"
+        print(
+            f"\n{'#'*78}"
+            f"\n##  Microphone was disconnected, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+            f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(20-len(get_record_duration(str_format=True)))} ##"
+            f"\n{'#'*78}\n"
+            )
+    elif reason == "not enough space left":
+        event_name = "space_error"
         print(
             f"\n{'#'*78}"
             f"\n##  Microphone was disconnected, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
@@ -166,6 +183,13 @@ def stop_recording(reason="red button long press"):
             f"\n{'#'*82}\n"
             )
     print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m")#, end="")
+    
+    try:
+        write_csv_row(f"{FILE_PATH}{filename}.csv", [get_record_duration(str_format=True), event_name])
+        save_audio_file(path=FILE_PATH, filename=filename, data=audio)
+    except FileNotFoundError: # storage device disconnected
+        pass
+    
     stream.stop()
     audio = []
     samples_counter = 0
@@ -210,54 +234,76 @@ def check_microphone(*args):
         last_screen_shown = True
         
 
-def read_audio_settings():
-    global device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD
-    audio_settings_file = f"/media/pi/{storage_device_name}/audio_settings.csv"
-    audio_settings_file_found = os.path.exists(audio_settings_file)
-    if audio_settings_file_found == True:
-        error_while_reading_audio_settings = False
+def read_config():
+    global device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE
+    config_file_name = "config.csv"
+    config_file = f"/media/pi/{storage_device_name}/{config_file_name}"
+    config_file_found = os.path.exists(config_file)
+    if config_file_found == True:
+        error_while_reading_config = False
         try:
             parameters = {}
-            with open(audio_settings_file, mode='r') as csvfile:
+            with open(config_file, mode='r') as csvfile:
                 for line in csvfile:
                     parameter, value = [element.strip() for element in line.split(';')]
                     parameters[parameter] = value
     #         sd.default.device = int(parameters["device"])
             device_name = parameters["device_name"]
-            CUTOFF_FREQUENCY = int(parameters["cutoff"])
+            CUTOFF_FREQUENCY = int(parameters["cutoff_Hz"])
             AMPLITUDE_THRESHOLD = float(parameters["threshold"])
-            print("Audio settings file found")
+            REC_DURATION = int(parameters["rec_duration_seconds"])
+            SAMPLE_RATE = int(parameters["sample_rate_Hz"])
+            print("Configuration file found")
+            print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         except: # error while reading file
-            error_while_reading_audio_settings = True
-            unreadable_audio_settings_file = f"/media/pi/{storage_device_name}/unreadable_audio_settings.csv"
-            with open(unreadable_audio_settings_file, mode='w'):
+            error_while_reading_config = True
+            unreadable_config_file = f"/media/pi/{storage_device_name}/unreadable_{config_file_name}"
+            with open(unreadable_config_file, mode='w'):
                 pass
-            shutil.copy(audio_settings_file, unreadable_audio_settings_file)
+            shutil.copy(config_file, unreadable_config_file)
             print("Error while reading audio settings file")
             
-    if audio_settings_file_found == False or error_while_reading_audio_settings == True:
+    if config_file_found == False or error_while_reading_config == True:
         device_name = sd.query_devices()[sd.default.device[0]].get('name')
+        # DEFAULT CONFIG
         CUTOFF_FREQUENCY = 15000 # Hz
         AMPLITUDE_THRESHOLD = 0.3 # between 0 and 1
-        with open(audio_settings_file, mode='w') as csvfile:
+        REC_DURATION = 60 # new file every [...] seconds
+        SAMPLE_RATE = 44100 # samples per second
+        with open(config_file, mode='w') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
             writer.writerows([
                 ["device_name", device_name],
-                ["cutoff", CUTOFF_FREQUENCY],
-                ["threshold", AMPLITUDE_THRESHOLD]])
-        if audio_settings_file_found == False:
-            print("No audio settings file found")
-        elif error_while_reading_audio_settings == True:
-            print("Unreadable settings copied to another file: unreadable_audio_settings.csv")
-        print("Created a new audio settings file with default settings")
+                ["cutoff_Hz", CUTOFF_FREQUENCY],
+                ["threshold", AMPLITUDE_THRESHOLD],
+                ["rec_duration_seconds", REC_DURATION],
+                ["sample_rate_Hz", SAMPLE_RATE]])
+        if config_file_found == False:
+            print("No config file found")
+        elif error_while_reading_config == True:
+            print("Unreadable config copied to another file: unreadable_config.csv")
+        print("Created a new configuration file with default values")
+
+
+def check_space_left(FILE_PATH):
+    global last_screen_shown
+    if not(enough_space_left(FILE_PATH)):
+        try:
+            stop_recording(reason="not enough space left")
+        except:
+            pass
+        last_screen_shown = False
+        print(f"\rNot enough space on storage device!{' '*50}\r", end="")        
+        while not(enough_space_left(FILE_PATH)):
+            led_error_animation(error="space")
 
 
 def storage_device_plugged():
     FILE_PATH = f"/media/pi/{storage_device_name}/events_files/"
     print_storage_device(storage_device_name)
     check_folder(FILE_PATH)
-    read_audio_settings()
-    print_audio_settings(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD)
+    check_space_left(FILE_PATH)
+    read_config()
 
 
 def check_storage_device(*args):
@@ -308,15 +354,19 @@ check_storage_device()
 
 
 ## FILE MANAGEMENT
-REC_DURATION = 60 # new file every [...] seconds
 FILE_PATH = f"/media/pi/{storage_device_name}/events_files/" # /!\ also defined in storage_device_plugged()
+check_space_left(FILE_PATH)
+read_config()
+
+BITS_PER_SAMPLE = int(re.findall('\d+', sd.default.dtype[0])[0])
+SIZE_OF_ONE_AUDIO_FILE = REC_DURATION * SAMPLE_RATE * (BITS_PER_SAMPLE / 8)
+SIZE_OF_ONE_EVENT_FILE = 10000
+SIZE_OF_ONE_RECORD = SIZE_OF_ONE_AUDIO_FILE + SIZE_OF_ONE_EVENT_FILE
 
 
 ## AUDIO RECORDING
-read_audio_settings()
     
 
-SAMPLE_RATE = 44100 # samples per second
 SAMPLE_DURATION = 1/SAMPLE_RATE
 
 sd.default.samplerate = SAMPLE_RATE

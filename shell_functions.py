@@ -11,13 +11,15 @@ def clear_console_line():
     print(f"\r{' '*100}\r", end="")
 
 
-def print_audio_settings(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD):
+def print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE):
     print(
         "----------------------------\n"
         f"\033[1mConfigured audio device\033[0m: {device_name}\n"
         f"\033[1mCurrent audio device\033[0m: default\n"
         f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
-        f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}"
+        f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}\n"
+        f"\033[1mRecord duration\033[0m: {REC_DURATION} seconds\n"
+        f"\033[1mSample rate\033[0m: {SAMPLE_RATE} Hz"
         "\n----------------------------\n"
     )
 # sd.query_devices()[stream.device]['name']

@@ -3,6 +3,7 @@ from sense_hat import SenseHat # LED matrix
 
 RED_RGB = (255, 0, 0)
 GREEN_RGB = (0, 255, 0)
+ORANGE_RGB = (255, 100, 0)
 VOID_RGB = (0, 0, 0)
 WHITE_RGB = (255, 255, 255)
 
@@ -87,11 +88,29 @@ def led_no_storage_device():
     sense.set_pixels(matrix)
 
 
+def led_not_enough_space():
+    X = ORANGE_RGB
+    O = VOID_RGB
+    C = WHITE_RGB
+    matrix = [
+        O, O, O, C, C, O, O, O,
+        O, O, O, C, C, O, O, O,
+        O, O, O, C, C, O, O, O,
+        O, C, O, C, C, O, C, O,
+        O, O, C, C, C, C, O, O,
+        X, O, O, C, C, O, O, X,
+        X, O, O, O, O, O, O, X,
+        X, X, X, X, X, X, X, X]
+    sense.set_pixels(matrix)
+
+
 def led_error_animation(error):
     if error == "mic":
         image = led_no_mic
     elif error == "storage":
         image = led_no_storage_device
+    elif error == "space":
+        image = led_not_enough_space
     led_fully_red()
     t.sleep(0.5)
     image()
