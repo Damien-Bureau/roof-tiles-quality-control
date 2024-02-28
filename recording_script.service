@@ -1,0 +1,11 @@
+[Unit]
+Description=Recording script
+
+[Service]
+ExecStart=/usr/bin/python3 /home/pi/Desktop/HMI_Damien/Step-1-RECORDING/Ready_to_use/main.py
+WorkingDirectory=/home/pi/Desktop/HMI_Damien/Step-1-RECORDING/Ready_to_use/
+Restart=always
+User=pi
+
+[Install]
+WantedBy=multi-user.target
