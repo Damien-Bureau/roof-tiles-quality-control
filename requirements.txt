@@ -1,0 +1,6 @@
+numpy
+scipy
+RPi.GPIO
+pyudev
+sounddevice
+sense_hat
