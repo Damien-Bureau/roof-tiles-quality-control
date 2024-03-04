@@ -1,5 +1,6 @@
 import os
 import pyudev
+import subprocess
 import sounddevice as sd
 
 def get_input_devices_list():
@@ -41,9 +42,24 @@ def find_microphone():
     return mic_connected
 
 
+def mount_storage_device(device_path, mount_point):
+    subprocess.run(['sudo mkdir -p', mount_point])
+    subprocess.run(['sudo mount', device_path, mount_point])
+
+
 def find_storage_device():
-    devices_folders = os.listdir("/media/pi")
+    '''
+    context = pyudev.Context()
+    devices = []
+    for device in context.list_devices(subsystem='block'):
+        if device.get('ID_BUS') == "usb":
+            devices.append(device.device_node)
+    return devices
+
+    '''
+    devices_folders = os.listdir("/mnt/usb/") # "/media/pi")
     if any(devices_folders):
-        return devices_folders[0]
+        return "USB_DAMIEN/" #devices_folders[0]
     else:
         return None
+    

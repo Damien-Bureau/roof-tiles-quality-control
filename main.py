@@ -52,20 +52,26 @@ def get_datetime():
     return raw_datetime.strftime("%Y%m%d_%H-%M-%S")
 
 
+def reset_audio_variables():
+    global audio, samples_counter
+    audio = []
+    samples_counter = 0
+
+
 def check_folder(folder_name):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
         print(f'Created folder "{folder_name}"')
 
 
-def get_disk_usage(FILE_PATH):
-    total, used, free = shutil.disk_usage(FILE_PATH)
+def get_disk_usage(EVENTS_FILES_FOLDER):
+    total, used, free = shutil.disk_usage(EVENTS_FILES_FOLDER)
     return {'total': total, 'used': used, 'free': free}
     print(total, used, free)
     
     
-def enough_space_left(FILE_PATH):
-    return get_disk_usage(FILE_PATH)['free'] > 15000000 # 15 Mo#SIZE_OF_ONE_RECORD
+def enough_space_left(EVENTS_FILES_FOLDER):
+    return get_disk_usage(EVENTS_FILES_FOLDER)['free'] > 15000000 # 15 Mo #SIZE_OF_ONE_RECORD
 
 
 def write_csv_row(filename: str, data: list):
@@ -75,7 +81,7 @@ def write_csv_row(filename: str, data: list):
 
 
 def write_event_in_file(event_name: str, event_timestamp: float):
-    write_csv_row(f"{FILE_PATH}{filename}.csv", [round(event_timestamp,3), event_name])
+    write_csv_row(f"{EVENTS_FILES_FOLDER}{filename}.csv", [round(event_timestamp,3), event_name])
 
 
 def save_audio_file(path: str, filename: str, data: list):
@@ -134,9 +140,8 @@ def start_recording():
     state = "recording"
     nothing_happened_feedback_shown = True
     filename = get_datetime()
-    write_csv_row(f"{FILE_PATH}{filename}.csv", [0, "on"]) # starts a new csv file
-    audio = []
-    samples_counter = 0
+    write_csv_row(f"{EVENTS_FILES_FOLDER}{filename}.csv", [0, "on"]) # starts a new csv file
+    reset_audio_variables()
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
     stream.start()
     led_fully_white()
@@ -185,21 +190,20 @@ def stop_recording(reason="red button long press"):
     print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m")#, end="")
     
     try:
-        write_csv_row(f"{FILE_PATH}{filename}.csv", [get_record_duration(str_format=True), event_name])
-        save_audio_file(path=FILE_PATH, filename=filename, data=audio)
+        write_csv_row(f"{EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
+        save_audio_file(path=EVENTS_FILES_FOLDER, filename=filename, data=audio)
     except FileNotFoundError: # storage device disconnected
         pass
     
     stream.stop()
-    audio = []
-    samples_counter = 0
+    reset_audio_variables()
     led_white_cross()
-#     visualize_audio_and_events(filename, AMPLITUDE_THRESHOLD, files_path="events_files")
+    # visualize_audio_and_events(filename, AMPLITUDE_THRESHOLD, files_path="events_files")
 
 
 def start_new_file():
     global audio, samples_counter, filename, green_btn_press_timestamp, red_btn_press_timestamp
-    save_audio_file(path=FILE_PATH, filename=filename, data=audio)
+    save_audio_file(path=EVENTS_FILES_FOLDER, filename=filename, data=audio)
     print(
         f"\n{'#'*62}"
         f"\n##  The record started {get_record_duration():.2f}s ago, time to make a new one!  ##"
@@ -207,9 +211,41 @@ def start_new_file():
         f"\n{'#'*62}\n"
         )
     filename = get_datetime()
-    audio = []
-    samples_counter = 0
+    reset_audio_variables()
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
+
+
+def storage_device_error():
+    global last_screen_shown
+    last_screen_shown = False
+
+    try:
+        stop_recording(reason="storage device disconnected")
+    except NameError: # if stream isn't defined (at the first launch)
+        pass
+
+    print(f"\rNo storage device! {' '*100}\r", end="")
+    
+    while find_storage_device() == None:
+        led_error_animation(error="storage")
+    
+    clear_console_line()
+
+
+def space_error():
+    global last_screen_shown
+    last_screen_shown = False
+
+    try:
+        stop_recording(reason="not enough space left")
+    except:
+        pass
+
+    print(f"\rNot enough space on storage device!{' '*50}\r", end="")        
+    while not(enough_space_left(EVENTS_FILES_FOLDER)):
+        led_error_animation(error="space")
+    
+    clear_console_line()
 
 
 def check_microphone(*args):
@@ -224,11 +260,9 @@ def check_microphone(*args):
         while not(is_microphone_connected()): # show animation on LED screen
             led_error_animation(error="mic")
         # The microphone is connected again
-        audio = []
-        samples_counter = 0
+        reset_audio_variables()
     if args and not(last_screen_shown): # if a LED display function is given (last screen)
-        audio = []
-        samples_counter = 0
+        reset_audio_variables()
         clear_console_line()
         args[0]()
         last_screen_shown = True
@@ -237,7 +271,7 @@ def check_microphone(*args):
 def read_config():
     global device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE
     config_file_name = "config.csv"
-    config_file = f"/media/pi/{storage_device_name}/{config_file_name}"
+    config_file = f"{DEVICE_PATH}{config_file_name}"
     config_file_found = os.path.exists(config_file)
     if config_file_found == True:
         error_while_reading_config = False
@@ -257,7 +291,7 @@ def read_config():
             print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         except: # error while reading file
             error_while_reading_config = True
-            unreadable_config_file = f"/media/pi/{storage_device_name}/unreadable_{config_file_name}"
+            unreadable_config_file = f"{STORAGE_PATH}/{storage_device_name}/unreadable_{config_file_name}"
             with open(unreadable_config_file, mode='w'):
                 pass
             shutil.copy(config_file, unreadable_config_file)
@@ -285,47 +319,38 @@ def read_config():
         print("Created a new configuration file with default values")
 
 
-def check_space_left(FILE_PATH):
-    global last_screen_shown
-    if not(enough_space_left(FILE_PATH)):
-        try:
-            stop_recording(reason="not enough space left")
-        except:
-            pass
-        last_screen_shown = False
-        print(f"\rNot enough space on storage device!{' '*50}\r", end="")        
-        while not(enough_space_left(FILE_PATH)):
-            led_error_animation(error="space")
+def check_space_left(EVENTS_FILES_FOLDER):
+    try:
+        if not(enough_space_left(EVENTS_FILES_FOLDER)):
+            space_error()
+    except:
+        print("error while checking space left on storage device")
+        storage_device_error()
 
 
 def storage_device_plugged():
-    FILE_PATH = f"/media/pi/{storage_device_name}/events_files/"
+    STORAGE_PATH = "/mnt/usb/" #"/media/pi/"
+    DEVICE_PATH = f"{STORAGE_PATH}{storage_device_name}"
+    EVENTS_FILES_FOLDER = f"{DEVICE_PATH}events_files/"
     print_storage_device(storage_device_name)
-    check_folder(FILE_PATH)
-    check_space_left(FILE_PATH)
+    check_folder(EVENTS_FILES_FOLDER)
+    check_space_left(EVENTS_FILES_FOLDER)
+    print("i'm here")
     read_config()
 
 
 def check_storage_device(*args):
     global last_screen_shown, storage_device_name, audio, samples_counter
     if find_storage_device() == None:
-        try:
-            stop_recording(reason="storage device disconnected")
-        except NameError: # if stream isn't defined (at the first launch)
-            pass
-        last_screen_shown = False
-        print(f"\rNo storage device! {' '*100}\r", end="")
-        while find_storage_device() == None:
-            led_error_animation(error="storage")
-        # The storage device is connected again
-        audio = []
-        samples_counter = 0
-        clear_console_line()
+        storage_device_error()
+
+        # The storage device is connected again when the error ends
+        reset_audio_variables()
         storage_device_name = find_storage_device()
         storage_device_plugged()
+
     if args and not(last_screen_shown):
-        audio = []
-        samples_counter = 0
+        reset_audio_variables()
         clear_console_line()
         args[0]() # last screen
         last_screen_shown = True
@@ -354,8 +379,11 @@ check_storage_device()
 
 
 ## FILE MANAGEMENT
-FILE_PATH = f"/media/pi/{storage_device_name}/events_files/" # /!\ also defined in storage_device_plugged()
-check_space_left(FILE_PATH)
+STORAGE_PATH = "/mnt/usb/" #"/media/pi/"
+DEVICE_PATH = f"{STORAGE_PATH}{storage_device_name}"
+EVENTS_FILES_FOLDER = f"{DEVICE_PATH}events_files/" # /!\ also defined in storage_device_plugged()
+check_space_left(EVENTS_FILES_FOLDER)
+storage_device_plugged()
 read_config()
 
 BITS_PER_SAMPLE = int(re.findall('\d+', sd.default.dtype[0])[0])
@@ -365,8 +393,6 @@ SIZE_OF_ONE_RECORD = SIZE_OF_ONE_AUDIO_FILE + SIZE_OF_ONE_EVENT_FILE
 
 
 ## AUDIO RECORDING
-    
-
 SAMPLE_DURATION = 1/SAMPLE_RATE
 
 sd.default.samplerate = SAMPLE_RATE
