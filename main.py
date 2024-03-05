@@ -1,5 +1,3 @@
-# Version 4
-
 import sys
 import os
 import shutil
@@ -15,15 +13,9 @@ import sounddevice as sd # record audio
 import scipy # save audio in a file
 import re # find digits in a string
 
-
-from devices import find_microphone, find_storage_device
-from shell_functions import error, info, clear_console_line, print_config, print_storage_device
-from led_display_functions import (led_fully_white, led_fully_red, led_circle, led_outline, led_white_cross,
-                                   led_no_mic, led_no_storage_device, led_error_animation)
-
-
-def is_microphone_connected():
-    return find_microphone()
+from devices import is_microphone_connected, find_storage_device
+from shell_functions import error, info, comment, clear_console_line, print_config, print_storage_device
+from led_display_functions import led_fully_white, led_circle, led_white_cross, led_error_animation
 
 
 def read_button(button_pin: int):
@@ -58,26 +50,41 @@ def reset_audio_variables():
     samples_counter = 0
 
 
-def check_folder(folder_name):
+def check_folder(folder_name: str):
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
         print(f'Created folder "{folder_name}"')
 
 
-def get_disk_usage(EVENTS_FILES_FOLDER):
-    total, used, free = shutil.disk_usage(EVENTS_FILES_FOLDER)
+def get_disk_usage(device_path: str):
+    total, used, free = shutil.disk_usage(device_path)
     return {'total': total, 'used': used, 'free': free}
-    print(total, used, free)
     
     
-def enough_space_left(EVENTS_FILES_FOLDER):
-    return get_disk_usage(EVENTS_FILES_FOLDER)['free'] > 15000000 # 15 Mo #SIZE_OF_ONE_RECORD
+def is_there_enough_space_left(location: str):
+    return get_disk_usage(location)['free'] > 10000000 #SIZE_OF_ONE_RECORD
+
+
+def check_space_left(location):
+    enough_space_left = True
+    try:
+        if is_there_enough_space_left(location=location) == False:
+            enough_space_left = False
+            space_error()
+    except Exception as e:
+        enough_space_left = False
+        print(e)
+    return enough_space_left
 
 
 def write_csv_row(filename: str, data: list):
-    with open(filename, 'a') as csvfile:
-        csv_writer = csv.writer(csvfile)
-        csv_writer.writerow(data)
+    try:
+        with open(filename, 'a') as csvfile:
+            csv_writer = csv.writer(csvfile)
+            csv_writer.writerow(data)
+    
+    except OSError: # no space left on device
+        check_space_left(EVENTS_FILES_FOLDER)
 
 
 def write_event_in_file(event_name: str, event_timestamp: float):
@@ -176,7 +183,7 @@ def stop_recording(reason="red button long press"):
         event_name = "space_error"
         print(
             f"\n{'#'*78}"
-            f"\n##  Microphone was disconnected, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+            f"\n##  Not enough space on device, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
             f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(20-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*78}\n"
             )
@@ -242,7 +249,7 @@ def space_error():
         pass
 
     print(f"\rNot enough space on storage device!{' '*50}\r", end="")        
-    while not(enough_space_left(EVENTS_FILES_FOLDER)):
+    while not(is_there_enough_space_left()):
         led_error_animation(error="space")
     
     clear_console_line()
@@ -276,21 +283,27 @@ def read_config():
     if config_file_found == True:
         error_while_reading_config = False
         try:
+            # Read parameters
             parameters = {}
             with open(config_file, mode='r') as csvfile:
                 for line in csvfile:
                     parameter, value = [element.strip() for element in line.split(';')]
                     parameters[parameter] = value
-    #         sd.default.device = int(parameters["device"])
+            
+            # Extract parameters
+            'sd.default.device = int(parameters["device"])'
             device_name = parameters["device_name"]
             CUTOFF_FREQUENCY = int(parameters["cutoff_Hz"])
             AMPLITUDE_THRESHOLD = float(parameters["threshold"])
             REC_DURATION = int(parameters["rec_duration_seconds"])
             SAMPLE_RATE = int(parameters["sample_rate_Hz"])
-            print("Configuration file found")
+            comment("Configuration file found")
             print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
+        
         except: # error while reading file
             error_while_reading_config = True
+
+            # Create a copy of the file found
             unreadable_config_file = f"{STORAGE_PATH}/{storage_device_name}/unreadable_{config_file_name}"
             with open(unreadable_config_file, mode='w'):
                 pass
@@ -299,11 +312,14 @@ def read_config():
             
     if config_file_found == False or error_while_reading_config == True:
         device_name = sd.query_devices()[sd.default.device[0]].get('name')
+        
         # DEFAULT CONFIG
-        CUTOFF_FREQUENCY = 15000 # Hz
-        AMPLITUDE_THRESHOLD = 0.3 # between 0 and 1
-        REC_DURATION = 60 # new file every [...] seconds
-        SAMPLE_RATE = 44100 # samples per second
+        CUTOFF_FREQUENCY = 15000   # Hz
+        AMPLITUDE_THRESHOLD = 0.3  # between 0 and 1
+        REC_DURATION = 60          # new file every [...] seconds
+        SAMPLE_RATE = 44100        # samples per second
+        
+        # Create a new file with default config values
         with open(config_file, mode='w') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
             writer.writerows([
@@ -312,6 +328,8 @@ def read_config():
                 ["threshold", AMPLITUDE_THRESHOLD],
                 ["rec_duration_seconds", REC_DURATION],
                 ["sample_rate_Hz", SAMPLE_RATE]])
+        
+        # Logs
         if config_file_found == False:
             print("No config file found")
         elif error_while_reading_config == True:
@@ -319,36 +337,42 @@ def read_config():
         print("Created a new configuration file with default values")
 
 
-def check_space_left(EVENTS_FILES_FOLDER):
-    try:
-        if not(enough_space_left(EVENTS_FILES_FOLDER)):
-            space_error()
-    except:
-        print("error while checking space left on storage device")
-        storage_device_error()
-
-
 def storage_device_plugged():
+    # Paths to access storage device
+    global STORAGE_PATH, DEVICE_PATH, EVENTS_FILES_FOLDER
     STORAGE_PATH = "/mnt/usb/" #"/media/pi/"
     DEVICE_PATH = f"{STORAGE_PATH}{storage_device_name}"
     EVENTS_FILES_FOLDER = f"{DEVICE_PATH}events_files/"
+
+    # Logs - show device info
     print_storage_device(storage_device_name)
-    check_folder(EVENTS_FILES_FOLDER)
-    check_space_left(EVENTS_FILES_FOLDER)
-    print("i'm here")
-    read_config()
+    
+    # Check if there is enough space for the 1rst events files
+    enough_space_left = True # check_space_left(EVENTS_FILES_FOLDER)
+    if enough_space_left == True:
+        # Check if folder for events files exists and read config file
+        check_folder(EVENTS_FILES_FOLDER)
+        read_config()
+
+    return enough_space_left
 
 
-def check_storage_device(*args):
+def check_storage_device(first_check=False, *args):
     global last_screen_shown, storage_device_name, audio, samples_counter
     if find_storage_device() == None:
-        storage_device_error()
+        # No storage device connected
+        storage_device_error() # loop waiting for a device
 
-        # The storage device is connected again when the error ends
+        # The storage device is connected when the error ends
         reset_audio_variables()
         storage_device_name = find_storage_device()
         storage_device_plugged()
+    
+    # If the storage device is already connected
+    if first_check == True:
+        storage_device_plugged()
 
+    # Show last image on LED screen
     if args and not(last_screen_shown):
         reset_audio_variables()
         clear_console_line()
@@ -358,7 +382,7 @@ def check_storage_device(*args):
     storage_device_name = find_storage_device()
 
 
-def audio_callback(indata, frames, time, status):
+def audio_callback(indata: np.ndarray, frames, time, status):
     global audio, samples_counter
     audio.extend(indata.reshape(-1))
     samples_counter += len(indata)
@@ -375,22 +399,19 @@ WHITE_RGB = (255, 255, 255)
 last_screen_shown = False
 check_microphone(led_white_cross) # doesn't start the stream if there's no audio device
 storage_device_name = None
-check_storage_device()
+check_storage_device(first_check=True)
 
 
 ## FILE MANAGEMENT
 STORAGE_PATH = "/mnt/usb/" #"/media/pi/"
 DEVICE_PATH = f"{STORAGE_PATH}{storage_device_name}"
 EVENTS_FILES_FOLDER = f"{DEVICE_PATH}events_files/" # /!\ also defined in storage_device_plugged()
-check_space_left(EVENTS_FILES_FOLDER)
-storage_device_plugged()
-read_config()
+
 
 BITS_PER_SAMPLE = int(re.findall('\d+', sd.default.dtype[0])[0])
 SIZE_OF_ONE_AUDIO_FILE = REC_DURATION * SAMPLE_RATE * (BITS_PER_SAMPLE / 8)
 SIZE_OF_ONE_EVENT_FILE = 10000
-SIZE_OF_ONE_RECORD = SIZE_OF_ONE_AUDIO_FILE + SIZE_OF_ONE_EVENT_FILE
-
+SIZE_OF_ONE_RECORD = SIZE_OF_ONE_AUDIO_FILE + SIZE_OF_ONE_EVENT_FILE # about 10 Mo for a 60s record
 
 ## AUDIO RECORDING
 SAMPLE_DURATION = 1/SAMPLE_RATE
@@ -451,7 +472,7 @@ print(
     "\n----------------------------"
 )'''
 print(f"\nCurrent state: \033[1;4m{state.upper()}\033[0m\n")
-print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m") #, end="")
+comment(f"Press the green button for {LONG_PRESS_DURATION}s to start recording")
 
 
 ### MAIN LOOP

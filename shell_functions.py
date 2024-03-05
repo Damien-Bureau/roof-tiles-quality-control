@@ -7,6 +7,9 @@ def error(message):
 def info(message):
     print(f"\033[97;46m {message} \033[0m")
 
+def comment(message):
+    print(f"\033[2m{message}\033[0m")
+
 def clear_console_line():
     print(f"\r{' '*100}\r", end="")
 
