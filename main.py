@@ -13,7 +13,7 @@ import sounddevice as sd # record audio
 import scipy # save audio in a file
 import re # find digits in a string
 
-from devices import is_microphone_connected, find_storage_device
+from devices import is_microphone_connected, find_storage_device, check_folder
 from shell_functions import error, info, comment, clear_console_line, print_config, print_storage_device
 from led_display_functions import led_fully_white, led_circle, led_white_cross, led_error_animation
 
@@ -48,12 +48,6 @@ def reset_audio_variables():
     global audio, samples_counter
     audio = []
     samples_counter = 0
-
-
-def check_folder(folder_name: str):
-    if not os.path.exists(folder_name):
-        os.makedirs(folder_name)
-        print(f'Created folder "{folder_name}"')
 
 
 def get_disk_usage(device_path: str):
@@ -114,7 +108,7 @@ def hit_detection(data: list):
     global last_hit, hits_detected, hit_i
     data = data[-HIT_DETECTION_ON_N_SAMPLES:]
 #     if len(data) < HIT_DETECTION_ON_N_SAMPLES:
-#         error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})")
+#         print(error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})"))
     start_index = len(audio) - HIT_DETECTION_ON_N_SAMPLES
     filtered_data = lowpass(data, cutoff=CUTOFF_FREQUENCY, sample_rate=SAMPLE_RATE)
     hits_detected = []
@@ -297,7 +291,7 @@ def read_config():
             AMPLITUDE_THRESHOLD = float(parameters["threshold"])
             REC_DURATION = int(parameters["rec_duration_seconds"])
             SAMPLE_RATE = int(parameters["sample_rate_Hz"])
-            comment("Configuration file found")
+            print(comment("Configuration file found"))
             print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         
         except: # error while reading file
@@ -472,7 +466,7 @@ print(
     "\n----------------------------"
 )'''
 print(f"\nCurrent state: \033[1;4m{state.upper()}\033[0m\n")
-comment(f"Press the green button for {LONG_PRESS_DURATION}s to start recording")
+print(comment(f"Press the green button for {LONG_PRESS_DURATION}s to start recording"))
 
 
 ### MAIN LOOP
@@ -527,7 +521,7 @@ while True:
         
         # Doing hit detection when DURATION_BETWEEN_HIT_DETECTION is reached
         if samples_to_seconds(samples_counter) > DURATION_BETWEEN_HIT_DETECTION:
-#             info(f"{samples_counter} samples = {samples_to_seconds(samples_counter):.3f}s")
+#             print(info(f"{samples_counter} samples = {samples_to_seconds(samples_counter):.3f}s"))
             samples_counter = 0
             hit_detection(data=audio)
             read_and_store_hits_detected()
