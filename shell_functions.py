@@ -20,6 +20,9 @@ def red(message):
 def bold(message):
     return f"\033[1m{message}\033[0m"
 
+def italic(message):
+    return f"\033[3m{message}\033[0m"
+
 def clear_console_line():
     print(f"\r{' '*100}\r", end="")
 
