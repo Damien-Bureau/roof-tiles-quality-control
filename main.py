@@ -430,7 +430,7 @@ samples_counter = 0
 
 
 ## BUTTONS
-LONG_PRESS_DURATION = 3 # seconds, for buttons
+LONG_PRESS_DURATION = 1.5 # seconds, for buttons
 MINIMUM_TIME_GAP_BUTTONS = 0.25 # seconds, minimum time between two presses, to avoid bouncing
 
 GPIO.setmode(GPIO.BOARD)  # use physical pin numbering

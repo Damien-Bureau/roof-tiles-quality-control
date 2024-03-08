@@ -49,18 +49,18 @@ def is_microphone_connected():
 # Storage device functions ------------------------------------------------------------------------
 
 
-def check_folder(folder_name: str, print_end="\n"):
+def check_folder(folder_name: str, before_print="", print_end="\n"):
     # Create a folder if it doesn't already exists
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
-        print(f'Created folder "{folder_name}"', end=print_end)
+        print(f'{before_print}Created folder "{folder_name}"', end=print_end)
 
 
 def mount_usb_device(device_path, mount_point):
     print(f"  |\n  | Mounting device at {mount_point}... ", end="")
 
     # Create mount point folder if it doesn't already exists
-    check_folder(mount_point, print_end=" ")
+    check_folder(mount_point, before_print=f"{comment('no folder found')}\n  |   ", print_end="... ")
     
     try:
         # Mount device using linux command 'mount'
@@ -152,11 +152,47 @@ def listen_udev_events():
             break  # Exit the loop after processing one event
 
 
-print(comment("\nListening..."))
-import time as t
-while True:
-    listen_udev_events()
-    t.sleep(0.01)
+def check_if_usb_device_already_connected():
+    print("\nchecking if an USB device is already connected... ", end="")
+
+    # Wait to be sure the device is detected
+    subprocess.run(["sleep", "1.5"])
+    
+    try:
+        output = subprocess.run(["sudo", "blkid"], text=True, check=True, capture_output=True)
+        lines = []
+        device_path, device_label = None, None
+        for line in output.stdout.split("\n"):
+            if "bootfs" not in line and "rootfs" not in line and 'TYPE="vfat"' in line:
+                lines.append(line)
+                # Extract device path and label
+                # NB: only the last device will be retained, since only one is needed
+                device_path = line.split(':')[0]
+                device_label = line.split('LABEL="')[1].split('"')[0]
+
+        print(green("done"))
+        print("  |", comment(f"found {len(lines)} device{'s' if len(lines)>1 else ''}"))
+        
+        if device_path and device_label:
+            print(f"  |\n  | USB device connected: {bold(device_label)} ({device_path})")
+                    
+            # Mount device
+            mount_point = f"/mnt/usb/{device_label}"
+            mount_usb_device(device_path, mount_point)
+    
+    except subprocess.CalledProcessError as e:
+        print(error("error"))
+        print(f"  | {red(e)}")
+        print(f"  | {comment(e.stderr)}")
+        return []
+
+
+# check_if_usb_device_already_connected()
+# print(comment("\nListening..."))
+# import time as t
+# while True:
+#     listen_udev_events()
+#     t.sleep(0.01)
 
 
 
