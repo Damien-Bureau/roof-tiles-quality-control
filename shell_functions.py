@@ -36,13 +36,13 @@ def log_journalctl(message, options=[""]):
 
 def print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE):
     print(
-        "----------------------------\n"
-        f"\033[1mConfigured audio device\033[0m: {device_name}\n"
-        f"\033[1mCurrent audio device\033[0m: default\n"
-        f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
-        f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}\n"
-        f"\033[1mRecord duration\033[0m: {REC_DURATION} seconds\n"
-        f"\033[1mSample rate\033[0m: {SAMPLE_RATE} Hz"
+        "\n----------------------------\n"
+        f"{bold('Configured audio device')}: {device_name}\n"
+        f"{bold('Current audio device')}: default\n"
+        f"{bold('Cutoff')}: {CUTOFF_FREQUENCY} Hz\n"
+        f"{bold('Threshold')}: {AMPLITUDE_THRESHOLD}\n"
+        f"{bold('Record duration')}: {REC_DURATION} seconds\n"
+        f"{bold('Sample rate')}: {SAMPLE_RATE} Hz"
         "\n----------------------------\n"
     )
 # sd.query_devices()[stream.device]['name']
@@ -51,6 +51,6 @@ def print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATIO
 def print_storage_device(storage_device_name):
     print(
         "\n----------------------------\n"
-        f"\033[1mStorage device\033[0m: {storage_device_name}"
+        f"{bold('Storage device')}: {storage_device_name}"
         "\n----------------------------\n"
     )

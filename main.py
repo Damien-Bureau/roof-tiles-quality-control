@@ -11,10 +11,9 @@ import numpy as np
 import csv
 import sounddevice as sd # record audio
 import scipy # save audio in a file
-import re # find digits in a string
 
-from devices import is_microphone_connected, find_storage_device, check_folder
-from shell_functions import error, info, comment, clear_console_line, print_config, print_storage_device
+import devices
+from shell_functions import error, info, comment, green, red, bold, italic, clear_console_line, print_config
 from led_display_functions import led_fully_white, led_circle, led_white_cross, led_error_animation
 
 
@@ -28,7 +27,8 @@ def green_btn_pressed():
     write_event_in_file(event_name="green", event_timestamp=green_btn_press_timestamp)
     led_circle(color=GREEN_RGB)
     nothing_happened_feedback_shown = False
-    print(f"\033[32mGreen button\033[0m was pressed (timestamp: {round(green_btn_press_timestamp,3)})")
+    print(f"{green('Green button')} was pressed (timestamp: {round(green_btn_press_timestamp,3)})")
+
 
 def red_btn_pressed():
     global red_btn_press_timestamp, nothing_happened_feedback_shown
@@ -36,7 +36,7 @@ def red_btn_pressed():
     write_event_in_file(event_name="red", event_timestamp=red_btn_press_timestamp)
     led_circle(color=RED_RGB)
     nothing_happened_feedback_shown = False
-    print(f"\033[31mRed button\033[0m was pressed (timestamp: {round(red_btn_press_timestamp,3)})")
+    print(f"{red('Red button')} was pressed (timestamp: {round(red_btn_press_timestamp,3)})")
 
 
 def get_datetime():
@@ -50,25 +50,29 @@ def reset_audio_variables():
     samples_counter = 0
 
 
-def get_disk_usage(device_path: str):
-    total, used, free = shutil.disk_usage(device_path)
-    return {'total': total, 'used': used, 'free': free}
-    
-    
-def is_there_enough_space_left(location: str):
-    return get_disk_usage(location)['free'] > 10000000 #SIZE_OF_ONE_RECORD
+def error_while_writing_in_storage_device():
+    global last_screen_shown
+    last_screen_shown = False
 
-
-def check_space_left(location):
-    enough_space_left = True
     try:
-        if is_there_enough_space_left(location=location) == False:
-            enough_space_left = False
-            space_error()
+        stop_recording(reason="error while writing in storage device")
     except Exception as e:
-        enough_space_left = False
-        print(e)
-    return enough_space_left
+        print(red(f"Can't stop recording: {e}"))
+       
+    while devices.is_storage_device_connected():
+        led_error_animation(error="writing")
+
+    # The storage device is disconnected
+    print(info("going to call check_storage_device()"))
+    check_storage_device()
+    print(info("done calling check_storage_device(), now wwhat?"))
+
+    # Show last image on LED screen (always white cross because record stops when an error occurs)
+    if last_screen_shown == False:
+        reset_audio_variables()
+        clear_console_line()
+        led_white_cross()
+        last_screen_shown = True
 
 
 def write_csv_row(filename: str, data: list):
@@ -76,17 +80,39 @@ def write_csv_row(filename: str, data: list):
         with open(filename, 'a') as csvfile:
             csv_writer = csv.writer(csvfile)
             csv_writer.writerow(data)
-    
-    except OSError: # no space left on device
-        check_space_left(EVENTS_FILES_FOLDER)
+    except: # device disconnected or no space left on device
+        error_while_writing_in_storage_device()
 
 
 def write_event_in_file(event_name: str, event_timestamp: float):
-    write_csv_row(f"{EVENTS_FILES_FOLDER}{filename}.csv", [round(event_timestamp,3), event_name])
+    try:
+        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [round(event_timestamp,3), event_name])
+    except: # device disconnected or no space left on device
+        error_while_writing_in_storage_device()
+
+
+def write_config_file_with_default_values(config_file):
+    try:
+        with open(config_file, mode='w') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            writer.writerows([
+                ["device_name", device_name],
+                ["cutoff_Hz", CUTOFF_FREQUENCY],
+                ["threshold", AMPLITUDE_THRESHOLD],
+                ["rec_duration_seconds", REC_DURATION],
+                ["sample_rate_Hz", SAMPLE_RATE]])
+        print(green("done"))
+
+    except: # device disconnected or no space left on device
+        print(red("failed"))
+        error_while_writing_in_storage_device()
 
 
 def save_audio_file(path: str, filename: str, data: list):
-    scipy.io.wavfile.write(f"{path}{filename}.wav", SAMPLE_RATE, np.array(data)) # saves the audio recorded into a file
+    try:
+        scipy.io.wavfile.write(f"{path}{filename}.wav", SAMPLE_RATE, np.array(data)) # saves the audio recorded into a file
+    except: # device disconnected or no space left on device
+        error_while_writing_in_storage_device()
 
 
 def samples_to_seconds(sample: int):
@@ -141,7 +167,7 @@ def start_recording():
     state = "recording"
     nothing_happened_feedback_shown = True
     filename = get_datetime()
-    write_csv_row(f"{EVENTS_FILES_FOLDER}{filename}.csv", [0, "on"]) # starts a new csv file
+    write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [0, "on"]) # starts a new csv file
     reset_audio_variables()
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
     stream.start()
@@ -159,27 +185,32 @@ def stop_recording(reason="red button long press"):
     event_name = "off"
     
     if reason == "red button long press":
+        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
+        save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
         print(
             f"\n{'#'*83}"
             f"\n##  Red button was pressed for {button_press_duration:.2f}s, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
             f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(25-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*83}\n"
             )
+        print(comment(f"Press the green button for {LONG_PRESS_DURATION}s to start recording"))
     elif reason == "microphone disconnected":
         event_name = "mic_error"
+        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
+        save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
         print(
             f"\n{'#'*78}"
             f"\n##  Microphone was disconnected, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
             f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(20-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*78}\n"
             )
-    elif reason == "not enough space left":
+    elif reason == "error while writing in storage device":
         event_name = "space_error"
         print(
-            f"\n{'#'*78}"
-            f"\n##  Not enough space on device, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
-            f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(20-len(get_record_duration(str_format=True)))} ##"
-            f"\n{'#'*78}\n"
+            f"\n{'#'*88}"
+            f"\n##  Error while writing in storage device, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+            f"\n##  Unable to save files {filename} ({get_record_duration(str_format=True)}s) {' '*(38-len(get_record_duration(str_format=True)))} ##"
+            f"\n{'#'*88}\n"
             )
     elif reason == "storage device disconnected" and stream.active == True:
         print(
@@ -188,13 +219,6 @@ def stop_recording(reason="red button long press"):
             f"\n##  Unable to save files {filename} ({get_record_duration(str_format=True)}s) {' '*(32-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*82}\n"
             )
-    print(f"\033[2mPress the green button for {LONG_PRESS_DURATION}s to start recording\033[0m")#, end="")
-    
-    try:
-        write_csv_row(f"{EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
-        save_audio_file(path=EVENTS_FILES_FOLDER, filename=filename, data=audio)
-    except FileNotFoundError: # storage device disconnected
-        pass
     
     stream.stop()
     reset_audio_variables()
@@ -204,7 +228,7 @@ def stop_recording(reason="red button long press"):
 
 def start_new_file():
     global audio, samples_counter, filename, green_btn_press_timestamp, red_btn_press_timestamp
-    save_audio_file(path=EVENTS_FILES_FOLDER, filename=filename, data=audio)
+    save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
     print(
         f"\n{'#'*62}"
         f"\n##  The record started {get_record_duration():.2f}s ago, time to make a new one!  ##"
@@ -216,64 +240,36 @@ def start_new_file():
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
 
 
-def storage_device_error():
-    global last_screen_shown
-    last_screen_shown = False
-
-    try:
-        stop_recording(reason="storage device disconnected")
-    except NameError: # if stream isn't defined (at the first launch)
-        pass
-
-    print(f"\rNo storage device! {' '*100}\r", end="")
-    
-    while find_storage_device() == None:
-        led_error_animation(error="storage")
-    
-    clear_console_line()
-
-
-def space_error():
-    global last_screen_shown
-    last_screen_shown = False
-
-    try:
-        stop_recording(reason="not enough space left")
-    except:
-        pass
-
-    print(f"\rNot enough space on storage device!{' '*50}\r", end="")        
-    while not(is_there_enough_space_left()):
-        led_error_animation(error="space")
-    
-    clear_console_line()
-
-
 def check_microphone(*args):
-    global last_screen_shown, audio, samples_counter
-    if not(is_microphone_connected()):
+    global last_screen_shown
+    if not(devices.is_microphone_connected()):
         try:
             stop_recording(reason="microphone disconnected")
         except NameError: # if it's not recording
             pass
         last_screen_shown = False
         print(f"\rMicrophone not connected! {' '*100}\r", end="")
-        while not(is_microphone_connected()): # show animation on LED screen
+        while not(devices.is_microphone_connected()): # show animation on LED screen
             led_error_animation(error="mic")
         # The microphone is connected again
         reset_audio_variables()
-    if args and not(last_screen_shown): # if a LED display function is given (last screen)
+
+    # Show last image on LED screen (always white cross because record stops when an error occurs)
+    if last_screen_shown == False:
         reset_audio_variables()
         clear_console_line()
-        args[0]()
+        led_white_cross()
         last_screen_shown = True
         
 
 def read_config():
     global device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE
+    print("\nReading config file... ", end="")
+
     config_file_name = "config.csv"
-    config_file = f"{DEVICE_PATH}{config_file_name}"
+    config_file = f"{devices.DEVICE_PATH}/{config_file_name}"
     config_file_found = os.path.exists(config_file)
+    
     if config_file_found == True:
         error_while_reading_config = False
         try:
@@ -291,20 +287,21 @@ def read_config():
             AMPLITUDE_THRESHOLD = float(parameters["threshold"])
             REC_DURATION = int(parameters["rec_duration_seconds"])
             SAMPLE_RATE = int(parameters["sample_rate_Hz"])
-            print(comment("Configuration file found"))
+
+            print(green("done"))
             print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         
         except: # error while reading file
             error_while_reading_config = True
 
             # Create a copy of the file found
-            unreadable_config_file = f"{STORAGE_PATH}/{storage_device_name}/unreadable_{config_file_name}"
+            unreadable_config_file = f"{devices.DEVICE_PATH}/unreadable_{config_file_name}"
             with open(unreadable_config_file, mode='w'):
                 pass
             shutil.copy(config_file, unreadable_config_file)
-            print("Error while reading audio settings file")
             
     if config_file_found == False or error_while_reading_config == True:
+        print(red("failed"))
         device_name = sd.query_devices()[sd.default.device[0]].get('name')
         
         # DEFAULT CONFIG
@@ -313,67 +310,44 @@ def read_config():
         REC_DURATION = 60          # new file every [...] seconds
         SAMPLE_RATE = 44100        # samples per second
         
-        # Create a new file with default config values
-        with open(config_file, mode='w') as csvfile:
-            writer = csv.writer(csvfile, delimiter=';')
-            writer.writerows([
-                ["device_name", device_name],
-                ["cutoff_Hz", CUTOFF_FREQUENCY],
-                ["threshold", AMPLITUDE_THRESHOLD],
-                ["rec_duration_seconds", REC_DURATION],
-                ["sample_rate_Hz", SAMPLE_RATE]])
-        
         # Logs
         if config_file_found == False:
-            print("No config file found")
+            print("  |", comment("No config file found"))
         elif error_while_reading_config == True:
-            print("Unreadable config copied to another file: unreadable_config.csv")
-        print("Created a new configuration file with default values")
+            print("  |", comment("Unreadable config copied to another file: unreadable_config.csv"))
+        print("  | Creating a new configuration file with default values... ", end="")
 
-
-def storage_device_plugged():
-    # Paths to access storage device
-    global STORAGE_PATH, DEVICE_PATH, EVENTS_FILES_FOLDER
-    STORAGE_PATH = "/mnt/usb/" #"/media/pi/"
-    DEVICE_PATH = f"{STORAGE_PATH}{storage_device_name}"
-    EVENTS_FILES_FOLDER = f"{DEVICE_PATH}events_files/"
-
-    # Logs - show device info
-    print_storage_device(storage_device_name)
-    
-    # Check if there is enough space for the 1rst events files
-    enough_space_left = True # check_space_left(EVENTS_FILES_FOLDER)
-    if enough_space_left == True:
-        # Check if folder for events files exists and read config file
-        check_folder(EVENTS_FILES_FOLDER)
-        read_config()
-
-    return enough_space_left
+        # Create a new file with default config values
+        write_config_file_with_default_values(config_file)
+        print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
 
 
 def check_storage_device(first_check=False, *args):
-    global last_screen_shown, storage_device_name, audio, samples_counter
-    if find_storage_device() == None:
+    global last_screen_shown
+    if devices.is_storage_device_connected() == False:
         # No storage device connected
-        storage_device_error() # loop waiting for a device
+        try:
+            stop_recording(reason="storage device disconnected")
+        except NameError: # if stream isn't defined (at the first launch)
+            pass
+        
+        while devices.is_storage_device_connected() == False:
+            led_error_animation(error="storage")
 
-        # The storage device is connected when the error ends
+        # The storage device is connected again
+        if first_check == False:
+            read_config()
         reset_audio_variables()
-        storage_device_name = find_storage_device()
-        storage_device_plugged()
     
-    # If the storage device is already connected
     if first_check == True:
-        storage_device_plugged()
+        read_config()
 
-    # Show last image on LED screen
-    if args and not(last_screen_shown):
+    # Show last image on LED screen (always white cross because record stops when an error occurs)
+    if last_screen_shown == False:
         reset_audio_variables()
         clear_console_line()
-        args[0]() # last screen
+        led_white_cross()
         last_screen_shown = True
-        
-    storage_device_name = find_storage_device()
 
 
 def audio_callback(indata: np.ndarray, frames, time, status):
@@ -391,21 +365,15 @@ WHITE_RGB = (255, 255, 255)
 
 ## DEVICES VERIFICATIONS
 last_screen_shown = False
+
+# Storage device
+devices.listen_udev_events() # start asynchronous udev event observer (device events)
+devices.check_if_usb_device_already_connected() # if it's already connected, it wouldn't appear in udev events
+check_storage_device(True, led_white_cross)
+
+# Audio device
 check_microphone(led_white_cross) # doesn't start the stream if there's no audio device
-storage_device_name = None
-check_storage_device(first_check=True)
 
-
-## FILE MANAGEMENT
-STORAGE_PATH = "/mnt/usb/" #"/media/pi/"
-DEVICE_PATH = f"{STORAGE_PATH}{storage_device_name}"
-EVENTS_FILES_FOLDER = f"{DEVICE_PATH}events_files/" # /!\ also defined in storage_device_plugged()
-
-
-BITS_PER_SAMPLE = int(re.findall('\d+', sd.default.dtype[0])[0])
-SIZE_OF_ONE_AUDIO_FILE = REC_DURATION * SAMPLE_RATE * (BITS_PER_SAMPLE / 8)
-SIZE_OF_ONE_EVENT_FILE = 10000
-SIZE_OF_ONE_RECORD = SIZE_OF_ONE_AUDIO_FILE + SIZE_OF_ONE_EVENT_FILE # about 10 Mo for a 60s record
 
 ## AUDIO RECORDING
 SAMPLE_DURATION = 1/SAMPLE_RATE
@@ -431,7 +399,7 @@ samples_counter = 0
 
 ## BUTTONS
 LONG_PRESS_DURATION = 1.5 # seconds, for buttons
-MINIMUM_TIME_GAP_BUTTONS = 0.25 # seconds, minimum time between two presses, to avoid bouncing
+MINIMUM_TIME_GAP_BUTTONS = 0.1 # seconds, minimum time between two presses, to avoid bouncing
 
 GPIO.setmode(GPIO.BOARD)  # use physical pin numbering
 GREEN_BTN_PIN = 38
@@ -455,16 +423,6 @@ last_hit_timestamp = 0
 
 ## LAUNCH
 state = "not recording"
-'''
-print(
-    "\n----------------------------\n"
-    f"\033[1mStorage device\033[0m: {storage_device_name}"
-    "\n----------------------------\n"
-    f"\033[1mAudio device\033[0m: {device_name}\n"
-    f"\033[1mCutoff\033[0m: {CUTOFF_FREQUENCY} Hz\n"
-    f"\033[1mThreshold\033[0m: {AMPLITUDE_THRESHOLD}"
-    "\n----------------------------"
-)'''
 print(f"\nCurrent state: \033[1;4m{state.upper()}\033[0m\n")
 print(comment(f"Press the green button for {LONG_PRESS_DURATION}s to start recording"))
 
@@ -486,7 +444,6 @@ while True:
         if green_btn_state == 1 and green_btn_last_state == 1:
             button_press_duration = t.monotonic() - button_press_start_time
             if button_press_duration > LONG_PRESS_DURATION:
-                clear_console_line()
                 start_recording()
         
         green_btn_last_state = green_btn_state
@@ -532,7 +489,7 @@ while True:
         time_since_last_event = get_record_duration() - last_event_timestamp
         if time_since_last_event > WAITING_DURATION and not(nothing_happened_feedback_shown):
             led_fully_white()
-            print(f"\n\033[3mNothing happened for {time_since_last_event:.2f}s, color feedback set to fully white\033[0m\n")
+            print(italic(f"\nNothing happened for {time_since_last_event:.2f}s, color feedback set to fully white\n"))
             nothing_happened_feedback_shown = True
             
         

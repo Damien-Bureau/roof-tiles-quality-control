@@ -2,8 +2,12 @@ import os
 import pyudev
 import subprocess
 import sounddevice as sd
+import time as t
 
 from shell_functions import info, error, comment, green, red, bold, italic, log_journalctl
+
+DEVICE_PATH = None
+EVENTS_FILES_FOLDER = None
 
 # Audio device functions --------------------------------------------------------------------------
 
@@ -57,6 +61,7 @@ def check_folder(folder_name: str, before_print="", print_end="\n"):
 
 
 def mount_usb_device(device_path, mount_point):
+    global DEVICE_PATH, EVENTS_FILES_FOLDER
     print(f"  |\n  | Mounting device at {mount_point}... ", end="")
 
     # Create mount point folder if it doesn't already exists
@@ -65,6 +70,10 @@ def mount_usb_device(device_path, mount_point):
     try:
         # Mount device using linux command 'mount'
         subprocess.run(["sudo", "mount", device_path, mount_point], text=True, capture_output=True, check=True)
+        
+        DEVICE_PATH = mount_point
+        EVENTS_FILES_FOLDER = f"{DEVICE_PATH}/events_files/"
+        
         print(green("done"))
         print("  | USB device mounted successfully.\n")
         log_journalctl(message=f"USB device {device_path} mounted successfully at {mount_point}", options=["-p", "debug"])
@@ -80,11 +89,15 @@ def mount_usb_device(device_path, mount_point):
 
 
 def unmount_usb_device(mount_point):
+    global DEVICE_PATH, EVENTS_FILES_FOLDER
     print(f"  |\n  | Unmounting device at {mount_point}... ", end="")
     
     try:
         # Unmount device using linux command 'umount'
         subprocess.run(["sudo", "umount", mount_point], text=True, capture_output=True, check=True)
+
+        DEVICE_PATH, EVENTS_FILES_FOLDER = None, None
+
         print(green("done"))
         print("  | USB device unmounted successfully.\n")
         log_journalctl(message=f"USB device unmounted successfully at {mount_point}", options=["-p", "debug"])
@@ -125,37 +138,37 @@ def listen_udev_events():
     monitor = pyudev.Monitor.from_netlink(context)
     monitor.filter_by(subsystem='block')
 
-    # Loop to listen to udev events
-    while True:
-        device = monitor.poll()
-        if device is not None:
-            if device.action == 'add':  # device connected
-                device_path, device_label = get_usb_device_info(device)
+    # Callback function when a udev event occurs
+    def udev_event_callback(device):
+        if device.action == 'add':
+            device_path, device_label = get_usb_device_info(device)
 
-                if device_path and device_label: # if info about device are available
-                    print(f"  |\n  | USB device connected: {bold(device_label)} ({device_path})")
-                    
-                    # Mount device
-                    mount_point = f"/mnt/usb/{device_label}"
-                    mount_usb_device(device_path, mount_point)
-            
-            elif device.action == 'remove': # device disconnected
-                device_path, device_label = get_usb_device_info(device)
-
-                if device_path and device_label: # if info about device are available
-                    print(f"  |\n  | USB device disconnected: {bold(device_label)} ({device_path})")
+            if device_path and device_label:
+                print(f"  |\n  | USB device connected: {bold(device_label)} ({device_path})")
                 
-                    # Unmount device
-                    mount_point = f"/mnt/usb/{device_label}"
-                    unmount_usb_device(mount_point)
-                    
-            break  # Exit the loop after processing one event
+                # Mount device
+                mount_point = f"/mnt/usb/{device_label}"
+                mount_usb_device(device_path, mount_point)
+            
+        if device.action == 'remove':
+            device_path, device_label = get_usb_device_info(device)
 
+            if device_path and device_label:
+                print(f"  |\n  | USB device disconnected: {bold(device_label)} ({device_path})")
+            
+                # Unmount device
+                mount_point = f"/mnt/usb/{device_label}"
+                unmount_usb_device(mount_point)
+
+    # Create an asynchronous observer for device events
+    observer = pyudev.MonitorObserver(monitor, callback=udev_event_callback)
+    observer.start()
+    
 
 def check_if_usb_device_already_connected():
-    print("\nchecking if an USB device is already connected... ", end="")
+    print("\n\nChecking if an USB storage device is already connected... ", end="")
 
-    # Wait to be sure the device is detected
+    # Wait to be sure the device is going to be detected
     subprocess.run(["sleep", "1.5"])
     
     try:
@@ -179,36 +192,28 @@ def check_if_usb_device_already_connected():
             # Mount device
             mount_point = f"/mnt/usb/{device_label}"
             mount_usb_device(device_path, mount_point)
-    
+
+    # Just show if an error occurs
     except subprocess.CalledProcessError as e:
         print(error("error"))
         print(f"  | {red(e)}")
         print(f"  | {comment(e.stderr)}")
-        return []
+        log_journalctl(message=f"Error while checking if a device was already connected", options=["-p", "error"])
+        log_journalctl(message=f"Command returned non-zero exit status {e.returncode}", options=["-p", "warning"])
+        log_journalctl(message=e.stderr, options=["-p", "warning"])
 
+
+def is_storage_device_connected():
+    if DEVICE_PATH and EVENTS_FILES_FOLDER:
+        return True
+    else:
+        return False
 
 # check_if_usb_device_already_connected()
 # print(comment("\nListening..."))
-# import time as t
+# listen_udev_events()
 # while True:
-#     listen_udev_events()
-#     t.sleep(0.01)
+#     print(f"device connected: {is_storage_device_connected()}   |   {EVENTS_FILES_FOLDER}")
+#     t.sleep(1)
 
-
-
-def find_storage_device():
-    '''
-    context = pyudev.Context()
-    devices = []
-    for device in context.list_devices(subsystem='block'):
-        if device.get('ID_BUS') == "usb":
-            devices.append(device.device_node)
-    return devices
-
-    '''
-    devices_folders = os.listdir("/mnt/usb/") # "/media/pi")
-    if any(devices_folders):
-        return "USB_DAMIEN/" #devices_folders[0]
-    else:
-        return None
     

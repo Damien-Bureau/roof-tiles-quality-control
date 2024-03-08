@@ -88,7 +88,7 @@ def led_no_storage_device():
     sense.set_pixels(matrix)
 
 
-def led_not_enough_space():
+def led_writing_error():
     X = ORANGE_RGB
     O = VOID_RGB
     C = WHITE_RGB
@@ -109,8 +109,8 @@ def led_error_animation(error):
         image = led_no_mic
     elif error == "storage":
         image = led_no_storage_device
-    elif error == "space":
-        image = led_not_enough_space
+    elif error == "writing":
+        image = led_writing_error
     led_fully_red()
     t.sleep(0.5)
     image()
