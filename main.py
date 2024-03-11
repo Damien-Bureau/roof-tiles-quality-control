@@ -50,22 +50,18 @@ def reset_audio_variables():
     samples_counter = 0
 
 
-def error_while_writing_in_storage_device():
+def error_while_writing_in_storage_device(stop_the_record):
     global last_screen_shown
     last_screen_shown = False
 
-    try:
+    if stop_the_record == True:
         stop_recording(reason="error while writing in storage device")
-    except Exception as e:
-        print(red(f"Can't stop recording: {e}"))
-       
+     
     while devices.is_storage_device_connected():
         led_error_animation(error="writing")
 
     # The storage device is disconnected
-    print(info("going to call check_storage_device()"))
     check_storage_device()
-    print(info("done calling check_storage_device(), now wwhat?"))
 
     # Show last image on LED screen (always white cross because record stops when an error occurs)
     if last_screen_shown == False:
@@ -76,19 +72,19 @@ def error_while_writing_in_storage_device():
 
 
 def write_csv_row(filename: str, data: list):
-    try:
-        with open(filename, 'a') as csvfile:
-            csv_writer = csv.writer(csvfile)
-            csv_writer.writerow(data)
-    except: # device disconnected or no space left on device
-        error_while_writing_in_storage_device()
+    with open(filename, 'a') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        csv_writer.writerow(data)
 
 
 def write_event_in_file(event_name: str, event_timestamp: float):
     try:
         write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [round(event_timestamp,3), event_name])
+        return True
     except: # device disconnected or no space left on device
-        error_while_writing_in_storage_device()
+        print(red("\nerror while writing event in csv file"), end="")
+        error_while_writing_in_storage_device(stop_the_record=True)
+        return False
 
 
 def write_config_file_with_default_values(config_file):
@@ -102,17 +98,17 @@ def write_config_file_with_default_values(config_file):
                 ["rec_duration_seconds", REC_DURATION],
                 ["sample_rate_Hz", SAMPLE_RATE]])
         print(green("done"))
+        print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
+        return True
 
     except: # device disconnected or no space left on device
-        print(red("failed"))
-        error_while_writing_in_storage_device()
+        print(error("failed"))
+        error_while_writing_in_storage_device(stop_the_record=False)
+        return None
 
 
 def save_audio_file(path: str, filename: str, data: list):
-    try:
-        scipy.io.wavfile.write(f"{path}{filename}.wav", SAMPLE_RATE, np.array(data)) # saves the audio recorded into a file
-    except: # device disconnected or no space left on device
-        error_while_writing_in_storage_device()
+    scipy.io.wavfile.write(f"{path}{filename}.wav", SAMPLE_RATE, np.array(data)) # saves the audio recorded into a file
 
 
 def samples_to_seconds(sample: int):
@@ -164,10 +160,16 @@ def read_and_store_hits_detected():
 
 def start_recording():
     global state, filename, nothing_happened_feedback_shown, audio, samples_counter, green_btn_press_timestamp, red_btn_press_timestamp
+    try:
+        filename = get_datetime()
+        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [0, "on"]) # starts a new csv file
+    except:
+        print(error("failed to start the record"))
+        error_while_writing_in_storage_device(stop_the_record=False)
+        return
+
     state = "recording"
     nothing_happened_feedback_shown = True
-    filename = get_datetime()
-    write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [0, "on"]) # starts a new csv file
     reset_audio_variables()
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
     stream.start()
@@ -179,39 +181,57 @@ def start_recording():
         )
 
 
+def write_files_when_record_stops(event_name):
+    try:
+        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
+        save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
+        return True
+    except:
+        print(error("failed to write files at the end of the record"))
+        error_while_writing_in_storage_device(stop_the_record=False)
+        return None
+
+
 def stop_recording(reason="red button long press"):
     global state, audio, samples_counter
     state = "not recording"
     event_name = "off"
     
     if reason == "red button long press":
-        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
-        save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
-        print(
-            f"\n{'#'*83}"
-            f"\n##  Red button was pressed for {button_press_duration:.2f}s, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
-            f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(25-len(get_record_duration(str_format=True)))} ##"
-            f"\n{'#'*83}\n"
-            )
+        if write_files_when_record_stops(event_name): # no error occured while writing files
+            print(
+                f"\n{'#'*83}"
+                f"\n##  Red button was pressed for {button_press_duration:.2f}s, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+                f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(25-len(get_record_duration(str_format=True)))} ##"
+                f"\n{'#'*83}\n"
+                )
+        else:
+            print(
+                f"\n{'#'*83}"
+                f"\n##  Red button was pressed for {button_press_duration:.2f}s, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+                f"\n##  {red('An error occured while saving files')} {filename} ({get_record_duration(str_format=True)}s) {' '*(18-len(get_record_duration(str_format=True)))} ##"
+                f"\n{'#'*83}\n"
+                )
         print(comment(f"Press the green button for {LONG_PRESS_DURATION}s to start recording"))
+
     elif reason == "microphone disconnected":
         event_name = "mic_error"
-        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
-        save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
+        write_files_when_record_stops(event_name)
         print(
             f"\n{'#'*78}"
             f"\n##  Microphone was disconnected, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
             f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(20-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*78}\n"
             )
+    
     elif reason == "error while writing in storage device":
-        event_name = "space_error"
         print(
             f"\n{'#'*88}"
             f"\n##  Error while writing in storage device, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
             f"\n##  Unable to save files {filename} ({get_record_duration(str_format=True)}s) {' '*(38-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*88}\n"
             )
+    
     elif reason == "storage device disconnected" and stream.active == True:
         print(
             f"\n{'#'*82}"
@@ -228,7 +248,13 @@ def stop_recording(reason="red button long press"):
 
 def start_new_file():
     global audio, samples_counter, filename, green_btn_press_timestamp, red_btn_press_timestamp
-    save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
+
+    try:
+        save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
+    except:
+        error_while_writing_in_storage_device(stop_the_record=True)
+        return
+    
     print(
         f"\n{'#'*62}"
         f"\n##  The record started {get_record_duration():.2f}s ago, time to make a new one!  ##"
@@ -240,7 +266,7 @@ def start_new_file():
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
 
 
-def check_microphone(*args):
+def check_microphone():
     global last_screen_shown
     if not(devices.is_microphone_connected()):
         try:
@@ -289,7 +315,7 @@ def read_config():
             SAMPLE_RATE = int(parameters["sample_rate_Hz"])
 
             print(green("done"))
-            print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
+            print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         
         except: # error while reading file
             error_while_reading_config = True
@@ -319,10 +345,9 @@ def read_config():
 
         # Create a new file with default config values
         write_config_file_with_default_values(config_file)
-        print_config(device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
 
 
-def check_storage_device(first_check=False, *args):
+def check_storage_device(first_check=False):
     global last_screen_shown
     if devices.is_storage_device_connected() == False:
         # No storage device connected
@@ -331,6 +356,7 @@ def check_storage_device(first_check=False, *args):
         except NameError: # if stream isn't defined (at the first launch)
             pass
         
+        last_screen_shown = False
         while devices.is_storage_device_connected() == False:
             led_error_animation(error="storage")
 
@@ -369,10 +395,10 @@ last_screen_shown = False
 # Storage device
 devices.listen_udev_events() # start asynchronous udev event observer (device events)
 devices.check_if_usb_device_already_connected() # if it's already connected, it wouldn't appear in udev events
-check_storage_device(True, led_white_cross)
+check_storage_device(first_check=True)
 
 # Audio device
-check_microphone(led_white_cross) # doesn't start the stream if there's no audio device
+check_microphone() # doesn't start the stream if there's no audio device
 
 
 ## AUDIO RECORDING
@@ -431,8 +457,8 @@ print(comment(f"Press the green button for {LONG_PRESS_DURATION}s to start recor
 while True:
     while state == "not recording":
         
-        check_microphone(led_white_cross)
-        check_storage_device(led_white_cross)
+        check_microphone()
+        check_storage_device()
         
         green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
         
@@ -445,13 +471,14 @@ while True:
             button_press_duration = t.monotonic() - button_press_start_time
             if button_press_duration > LONG_PRESS_DURATION:
                 start_recording()
+                print(info(f"current state: {state}"))
         
         green_btn_last_state = green_btn_state
     
     while state == "recording":
         
-        check_microphone(led_white_cross)
-        check_storage_device(led_white_cross)
+        check_microphone()
+        check_storage_device()
         
         green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
         red_btn_state = read_button(button_pin=RED_BTN_PIN)
