@@ -50,13 +50,14 @@ def reset_audio_variables():
     samples_counter = 0
 
 
-def error_while_writing_in_storage_device(stop_the_record):
+def error_while_writing_in_storage_device(stop_the_record: bool):
     global last_screen_shown
     last_screen_shown = False
 
     if stop_the_record == True:
         stop_recording(reason="error while writing in storage device")
-     
+    
+    # Waits for the device to be disconnected (so the user can free up space)
     while devices.is_storage_device_connected():
         led_error_animation(error="writing")
 
@@ -81,6 +82,7 @@ def write_event_in_file(event_name: str, event_timestamp: float):
     try:
         write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [round(event_timestamp,3), event_name])
         return True
+    
     except: # device disconnected or no space left on device
         print(red("\nerror while writing event in csv file"), end="")
         error_while_writing_in_storage_device(stop_the_record=True)
@@ -129,8 +131,8 @@ def lowpass(data: list, cutoff: float, sample_rate: float, poles: int=5):
 def hit_detection(data: list):
     global last_hit, hits_detected, hit_i
     data = data[-HIT_DETECTION_ON_N_SAMPLES:]
-#     if len(data) < HIT_DETECTION_ON_N_SAMPLES:
-#         print(error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})"))
+    # if len(data) < HIT_DETECTION_ON_N_SAMPLES:
+    #    print(error(f"data too short ({len(data)} < {HIT_DETECTION_ON_N_SAMPLES})"))
     start_index = len(audio) - HIT_DETECTION_ON_N_SAMPLES
     filtered_data = lowpass(data, cutoff=CUTOFF_FREQUENCY, sample_rate=SAMPLE_RATE)
     hits_detected = []
@@ -166,7 +168,7 @@ def start_recording():
     except:
         print(error("failed to start the record"))
         error_while_writing_in_storage_device(stop_the_record=False)
-        return
+        return # cancel the starting procedure if an error occurs
 
     state = "recording"
     nothing_happened_feedback_shown = True
@@ -181,11 +183,12 @@ def start_recording():
         )
 
 
-def write_files_when_record_stops(event_name):
+def write_files_when_record_stops(event_name: str):
     try:
         write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
         save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
         return True
+    
     except:
         print(error("failed to write files at the end of the record"))
         error_while_writing_in_storage_device(stop_the_record=False)
@@ -205,7 +208,7 @@ def stop_recording(reason="red button long press"):
                 f"\n##  .csv and .wav files saved as {filename} ({get_record_duration(str_format=True)}s) {' '*(25-len(get_record_duration(str_format=True)))} ##"
                 f"\n{'#'*83}\n"
                 )
-        else:
+        else: # an error occured while writing files
             print(
                 f"\n{'#'*83}"
                 f"\n##  Red button was pressed for {button_press_duration:.2f}s, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
@@ -227,7 +230,7 @@ def stop_recording(reason="red button long press"):
     elif reason == "error while writing in storage device":
         print(
             f"\n{'#'*88}"
-            f"\n##  Error while writing in storage device, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
+            f"\n##  {red('Error while writing in storage device')}, switching to another state: \033[1;4m{state.upper()}\033[0m  ##"
             f"\n##  Unable to save files {filename} ({get_record_duration(str_format=True)}s) {' '*(38-len(get_record_duration(str_format=True)))} ##"
             f"\n{'#'*88}\n"
             )
@@ -471,7 +474,6 @@ while True:
             button_press_duration = t.monotonic() - button_press_start_time
             if button_press_duration > LONG_PRESS_DURATION:
                 start_recording()
-                print(info(f"current state: {state}"))
         
         green_btn_last_state = green_btn_state
     

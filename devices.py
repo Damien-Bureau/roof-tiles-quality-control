@@ -73,19 +73,30 @@ def mount_usb_device(device_path, mount_point):
         
         DEVICE_PATH = mount_point
         EVENTS_FILES_FOLDER = f"{DEVICE_PATH}/events_files/"
+        check_folder(EVENTS_FILES_FOLDER, before_print=f"{comment('no events_files folder found')}\n  |   ", print_end="... ")
         
         print(green("done"))
         print("  | USB device mounted successfully.\n")
         log_journalctl(message=f"USB device {device_path} mounted successfully at {mount_point}", options=["-p", "debug"])
     
     except subprocess.CalledProcessError as e:
-        # Just show if an error occurs
-        print(error("error"))
-        print(f"  | {red(e)}")
-        print(f"  | {comment(e.stderr)}")
-        log_journalctl(message=f"Error while mounting {device_path} at {mount_point}", options=["-p", "error"])
-        log_journalctl(message=f"Command returned non-zero exit status {e.returncode}", options=["-p", "warning"])
-        log_journalctl(message=e.stderr, options=["-p", "warning"])
+        if "already mounted" in e.stderr:
+            DEVICE_PATH = mount_point
+            EVENTS_FILES_FOLDER = f"{DEVICE_PATH}/events_files/"
+            check_folder(EVENTS_FILES_FOLDER, before_print=f"{comment('no events_files folder found')}\n  |   ", print_end="... ")
+            
+            print(green("ok"))
+            print("  | USB device already mounted.\n")
+            log_journalctl(message=f"USB device {device_path} already mounted at {mount_point}", options=["-p", "debug"])
+
+        else:
+            # Just show if an error occurs
+            print(error("error"))
+            print(f"  | {red(e)}")
+            print(f"  | {comment(e.stderr)}")
+            log_journalctl(message=f"Error while mounting {device_path} at {mount_point}", options=["-p", "error"])
+            log_journalctl(message=f"Command returned non-zero exit status {e.returncode}", options=["-p", "warning"])
+            log_journalctl(message=e.stderr, options=["-p", "warning"])
 
 
 def unmount_usb_device(mount_point):

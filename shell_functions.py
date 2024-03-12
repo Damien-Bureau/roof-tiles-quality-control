@@ -47,7 +47,7 @@ def print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD
         f"{bold('Record duration')}: {REC_DURATION} seconds\n"
         f"{bold('Sample rate')}: {SAMPLE_RATE} Hz"
         "\n----------------------------\n"
-        f"{italic(f'Free space: {free/1000000:.9f} Mo ({os.path.dirname(config_file)})')}"
+        f"{italic(f'Free space: {free/1000000:.3f} Mo ({os.path.dirname(config_file)})')}"
         "\n----------------------------\n"
     )
 # sd.query_devices()[stream.device]['name']
