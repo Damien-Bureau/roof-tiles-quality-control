@@ -1,3 +1,40 @@
+# Introduction
+## Context
+This project is a sound-based quality control tool designed for a roof tiles production line.<br>
+It takes the form of a box which:
+- is connected to a microphone in order to record audio
+- has a little LED screen for giving the user some feedback
+- has two push buttons (a red one and a green one) which are the user input
+ 
+<img src="./images/project summary.png" alt="images of the components" width="800">
+
+
+
+## Table of Contents
+<!-- TOC -->
+
+- [Introduction](#introduction)
+  - [Context](#context)
+  - [Table of Contents](#table-of-contents)
+- [How to setup this project](#how-to-setup-this-project)
+  - [Hardware requirements](#hardware-requirements)
+  - [Software configuration](#software-configuration)
+    - [1. Install Raspberry Pi OS Lite (64-bit)](#1-install-raspberry-pi-os-lite-64-bit)
+    - [2. Set up remote access via SSH](#2-set-up-remote-access-via-ssh)
+    - [3. Enable I2C](#3-enable-i2c)
+    - [4. Install Git](#4-install-git)
+    - [5. Get the project and the dependencies](#5-get-the-project-and-the-dependencies)
+- [How to use this project](#how-to-use-this-project)
+  - [User feedback - LED screen](#user-feedback---led-screen)
+    - [Normal use](#normal-use)
+    - [Edge cases](#edge-cases)
+  - [User input - push buttons](#user-input---push-buttons)
+  - [Custom settings](#custom-settings)
+
+<!-- /TOC -->
+
+
+# How to setup this project
 ## Hardware requirements
 
 - a Raspberry Pi (I’m using a [Pi 4 model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/))
@@ -16,12 +53,12 @@
 
 ## Software configuration
 
-### 1. Install **Raspberry Pi OS Lite (64-bit)**
+### 1. Install Raspberry Pi OS Lite (64-bit)
 
 1. Format the SD card using the [Raspberry Pi Imager](https://www.raspberrypi.com/software/)
 2. Downloading the OS image (you can find it [here](https://www.raspberrypi.com/software/operating-systems/))
 3. Still on the Raspberry Pi Imager, while selecting OS, chose “Use custom” and select the image you just downloaded
-4. Select “Change settings”. From there you can already configure WiFi and enable SSH (select “Use a password for authentification”). I also recommend to set a username and a password (keep these somewhere!).
+4. Select “Change settings”. From there you can already configure WiFi and enable SSH (select “Use a password for authentication”). I also recommend to set a username and a password (keep these somewhere!).
 
 ### 2. Set up remote access via SSH
 
@@ -99,7 +136,7 @@ Once remote access is set up, you don’t need a screen for the Pi anymore, ever
 3. Go to “I2C”
 4. Follow th instruction to enable I2C
 
-### 4. Install git
+### 4. Install Git
 
 Start by
 
@@ -182,3 +219,19 @@ cd ..
 ```
 > Source [here](https://stackoverflow.com/questions/59006083/how-to-install-portaudio-on-pi-properly)
 
+# How to use this project
+
+## User feedback - LED screen
+
+### Normal use
+
+### Edge cases
+
+
+## User input - push buttons
+
+
+## Custom settings
+[setup_audio_device.py](./setup_audio_device.py)
+<br>
+`config.csv`
