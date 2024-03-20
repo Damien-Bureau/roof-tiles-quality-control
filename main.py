@@ -98,7 +98,11 @@ def write_config_file_with_default_values(config_file):
                 ["cutoff_Hz", CUTOFF_FREQUENCY],
                 ["threshold", AMPLITUDE_THRESHOLD],
                 ["rec_duration_seconds", REC_DURATION],
-                ["sample_rate_Hz", SAMPLE_RATE]])
+                ["sample_rate_Hz", SAMPLE_RATE]
+                ["waiting_duration", 5],
+                ["long_press_duration", 1.5],
+                ["min_time_gap_between_2_button_presses", 0.1],
+                ["min_time_gap_between_2_hits", 0.5]])
         print(green("done"))
         print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         return True
@@ -316,6 +320,10 @@ def read_config():
             AMPLITUDE_THRESHOLD = float(parameters["threshold"])
             REC_DURATION = int(parameters["rec_duration_seconds"])
             SAMPLE_RATE = int(parameters["sample_rate_Hz"])
+            WAITING_DURATION = int(parameters["waiting_duration_seconds"])
+            LONG_PRESS_DURATION = int(parameters["long_press_duration_seconds"])
+            MINIMUM_TIME_GAP_BUTTONS = int(parameters["min_time_gap_between_2_button_presses_seconds"])
+            MINIMUM_TIME_GAP_BETWEEN_TWO_HITS = int(parameters["min_time_gap_between_2_hits_seconds"])
 
             print(green("done"))
             print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
@@ -338,7 +346,13 @@ def read_config():
         AMPLITUDE_THRESHOLD = 0.3  # between 0 and 1
         REC_DURATION = 60          # new file every [...] seconds
         SAMPLE_RATE = 44100        # samples per second
+        WAITING_DURATION = 5       # seconds, time threshold when nothing happens
+        LONG_PRESS_DURATION = 1.5  # seconds, for buttons
+        MINIMUM_TIME_GAP_BUTTONS = 0.1  # seconds, minimum time between two presses, to avoid bouncing
+        MINIMUM_TIME_GAP_BETWEEN_TWO_HITS = 0.5  # seconds, minimum time between two hits
+        MINIMUM_SAMPLE_GAP_BETWEEN_TWO_HITS = int(MINIMUM_TIME_GAP_BETWEEN_TWO_HITS * SAMPLE_RATE)
         
+
         # Logs
         if config_file_found == False:
             print("  |", comment("No config file found"))
@@ -420,16 +434,11 @@ audio = []
 DURATION_BETWEEN_HIT_DETECTION = 0.8 # seconds
 OVERLAP_FACTOR = 1.2
 HIT_DETECTION_ON_N_SAMPLES = int(DURATION_BETWEEN_HIT_DETECTION * OVERLAP_FACTOR / SAMPLE_DURATION)
-MINIMUM_TIME_GAP_BETWEEN_TWO_HITS = 0.5 # seconds, minimum time between two hits
-MINIMUM_SAMPLE_GAP_BETWEEN_TWO_HITS = int(MINIMUM_TIME_GAP_BETWEEN_TWO_HITS * SAMPLE_RATE)
 last_hit = 0
 samples_counter = 0
 
 
 ## BUTTONS
-LONG_PRESS_DURATION = 1.5 # seconds, for buttons
-MINIMUM_TIME_GAP_BUTTONS = 0.1 # seconds, minimum time between two presses, to avoid bouncing
-
 GPIO.setmode(GPIO.BOARD)  # use physical pin numbering
 GREEN_BTN_PIN = 38
 RED_BTN_PIN = 40
@@ -444,7 +453,6 @@ red_btn_state = 0
 red_btn_last_state = 0
 
 # Events timestamps
-WAITING_DURATION = 5 # seconds, time threshold when nothing happens
 green_btn_press_timestamp = 0
 red_btn_press_timestamp = 0
 last_hit_timestamp = 0

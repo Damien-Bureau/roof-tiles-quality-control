@@ -68,7 +68,7 @@ def update_plot(frame):
     
     return [lines_input, threshold_line, lines_filter]#, lines_output]
 
-000000000000000000000000000000000000000.
+
 ## Save audio settings
 def save_settings_in_file(location=f"/media/pi/USB DAMIEN"):
     config_file_name = "config.csv"
@@ -80,7 +80,11 @@ def save_settings_in_file(location=f"/media/pi/USB DAMIEN"):
             ["cutoff_Hz", int(cutoff.value)],
             ["threshold", float(threshold.value)],
             ["rec_duration_seconds", 60],
-            ["sample_rate_Hz", 44100]])
+            ["sample_rate_Hz", 44100],
+            ["waiting_duration_seconds", 5],
+            ["long_press_duration_seconds", 1.5],
+            ["min_time_gap_between_2_button_presses_seconds", 0.1],
+            ["min_time_gap_between_2_hits_seconds", 0.5]])
 
 def choose_location_to_save():
     location = filedialog.askdirectory()
