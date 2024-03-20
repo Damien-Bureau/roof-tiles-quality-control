@@ -1,6 +1,7 @@
 import sys
 import os
 import shutil
+import traceback
 
 import time as t
 import datetime as dt
@@ -13,7 +14,7 @@ import sounddevice as sd # record audio
 import scipy # save audio in a file
 
 import devices
-from shell_functions import error, info, comment, green, red, bold, italic, clear_console_line, print_config
+from shell_functions import error, info, comment, green, red, bold, italic, clear_console_line, print_config, log_journalctl
 from led_display_functions import led_fully_white, led_circle, led_white_cross, led_error_animation
 
 
@@ -83,8 +84,10 @@ def write_event_in_file(event_name: str, event_timestamp: float):
         write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [round(event_timestamp,3), event_name])
         return True
     
-    except: # device disconnected or no space left on device
+    except Exception as e: # device disconnected or no space left on device
         print(red("\nerror while writing event in csv file"), end="")
+        log_journalctl(message=repr(e), options=["-p", "error"])
+        log_journalctl(message="Error while writing event in csv file", options=["-p", "debug"])
         error_while_writing_in_storage_device(stop_the_record=True)
         return False
 
@@ -98,7 +101,7 @@ def write_config_file_with_default_values(config_file):
                 ["cutoff_Hz", CUTOFF_FREQUENCY],
                 ["threshold", AMPLITUDE_THRESHOLD],
                 ["rec_duration_seconds", REC_DURATION],
-                ["sample_rate_Hz", SAMPLE_RATE]
+                ["sample_rate_Hz", SAMPLE_RATE],
                 ["waiting_duration", 5],
                 ["long_press_duration", 1.5],
                 ["min_time_gap_between_2_button_presses", 0.1],
@@ -107,8 +110,10 @@ def write_config_file_with_default_values(config_file):
         print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         return True
 
-    except: # device disconnected or no space left on device
+    except Exception as e: # device disconnected or no space left on device
         print(error("failed"))
+        log_journalctl(message=traceback.print_exc, options=["-p", "error"])
+        log_journalctl(message="Error while writing config file with default values", options=["-p", "debug"])
         error_while_writing_in_storage_device(stop_the_record=False)
         return None
 
@@ -169,8 +174,10 @@ def start_recording():
     try:
         filename = get_datetime()
         write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [0, "on"]) # starts a new csv file
-    except:
+    except Exception as e:
         print(error("failed to start the record"))
+        log_journalctl(message=repr(e), options=["-p", "error"])
+        log_journalctl(message="Failed to start the record", options=["-p", "debug"])
         error_while_writing_in_storage_device(stop_the_record=False)
         return # cancel the starting procedure if an error occurs
 
@@ -189,12 +196,15 @@ def start_recording():
 
 def write_files_when_record_stops(event_name: str):
     try:
-        write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
-        save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
-        return True
+        if filename:
+            write_csv_row(f"{devices.EVENTS_FILES_FOLDER}{filename}.csv", [get_record_duration(str_format=True), event_name])
+            save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
+            return True
     
-    except:
+    except Exception as e:
         print(error("failed to write files at the end of the record"))
+        log_journalctl(message=repr(e), options=["-p", "error"])
+        log_journalctl(message=f"Failed to write files at the end of the record (event: {event_name})", options=["-p", "debug"])
         error_while_writing_in_storage_device(stop_the_record=False)
         return None
 
@@ -258,7 +268,9 @@ def start_new_file():
 
     try:
         save_audio_file(path=devices.EVENTS_FILES_FOLDER, filename=filename, data=audio)
-    except:
+    except Exception as e:
+        log_journalctl(message=repr(e), options=["-p", "error"])
+        log_journalctl(message="Failed to start new file", options=["-p", "debug"])
         error_while_writing_in_storage_device(stop_the_record=True)
         return
     
@@ -273,13 +285,14 @@ def start_new_file():
     green_btn_press_timestamp, red_btn_press_timestamp = 0, 0
 
 
-def check_microphone():
+def check_microphone(stop_the_record: bool=True):
     global last_screen_shown
     if not(devices.is_microphone_connected()):
-        try:
-            stop_recording(reason="microphone disconnected")
-        except NameError: # if it's not recording
-            pass
+        if stop_the_record == True:
+            try:
+                stop_recording(reason="microphone disconnected")
+            except NameError: # if it's not recording
+                pass
         last_screen_shown = False
         print(f"\rMicrophone not connected! {' '*100}\r", end="")
         while not(devices.is_microphone_connected()): # show animation on LED screen
@@ -297,6 +310,7 @@ def check_microphone():
 
 def read_config():
     global device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE
+    global WAITING_DURATION, LONG_PRESS_DURATION, MINIMUM_TIME_GAP_BUTTONS, MINIMUM_SAMPLE_GAP_BETWEEN_TWO_HITS
     print("\nReading config file... ", end="")
 
     config_file_name = "config.csv"
@@ -324,6 +338,7 @@ def read_config():
             LONG_PRESS_DURATION = int(parameters["long_press_duration_seconds"])
             MINIMUM_TIME_GAP_BUTTONS = int(parameters["min_time_gap_between_2_button_presses_seconds"])
             MINIMUM_TIME_GAP_BETWEEN_TWO_HITS = int(parameters["min_time_gap_between_2_hits_seconds"])
+            MINIMUM_SAMPLE_GAP_BETWEEN_TWO_HITS = int(MINIMUM_TIME_GAP_BETWEEN_TWO_HITS * SAMPLE_RATE)
 
             print(green("done"))
             print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
@@ -339,7 +354,13 @@ def read_config():
             
     if config_file_found == False or error_while_reading_config == True:
         print(red("failed"))
-        device_name = sd.query_devices()[sd.default.device[0]].get('name')
+        try:
+            device_name = sd.query_devices()[sd.default.device[0]].get('name')
+        except Exception as e:
+            log_journalctl(message=repr(e), options=["-p", "warning"])
+            log_journalctl(message="sounddevice.query_devices() returns nothing!", options=["-p", "debug"])
+            check_microphone(stop_the_record=False)
+            
         
         # DEFAULT CONFIG
         CUTOFF_FREQUENCY = 15000   # Hz
