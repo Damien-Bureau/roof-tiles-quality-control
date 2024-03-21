@@ -468,10 +468,10 @@ GPIO.setup(GREEN_BTN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 GPIO.setup(RED_BTN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
 # Rising edge detection variables
-green_btn_state = 0
-green_btn_last_state = 0
-red_btn_state = 0
-red_btn_last_state = 0
+green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
+green_btn_last_state = 1 - green_btn_state
+red_btn_state = read_button(button_pin=RED_BTN_PIN)
+red_btn_last_state = 1 - red_btn_state
 
 # Events timestamps
 green_btn_press_timestamp = 0
@@ -495,11 +495,11 @@ while True:
         green_btn_state = read_button(button_pin=GREEN_BTN_PIN)
         
         # Rising edge on the GREEN button
-        if green_btn_state == 1 and green_btn_last_state == 0:
+        if green_btn_state != green_btn_last_state:
             button_press_start_time = t.monotonic()
             
         # GREEN button held: start recording if it's a long press
-        if green_btn_state == 1 and green_btn_last_state == 1:
+        if green_btn_state == green_btn_last_state:
             button_press_duration = t.monotonic() - button_press_start_time
             if button_press_duration > LONG_PRESS_DURATION:
                 start_recording()
@@ -516,16 +516,16 @@ while True:
         
         # Rising edge on the GREEN button
         enough_time_since_last_press = (get_record_duration()-green_btn_press_timestamp) > MINIMUM_TIME_GAP_BUTTONS
-        if green_btn_state == 1 and green_btn_last_state == 0 and enough_time_since_last_press:
+        if green_btn_state != green_btn_last_state and enough_time_since_last_press:
             green_btn_pressed()
         
         # Rising edge on the RED button
         enough_time_since_last_press = (get_record_duration()-red_btn_press_timestamp) > MINIMUM_TIME_GAP_BUTTONS
-        if red_btn_state == 1 and red_btn_last_state == 0 and enough_time_since_last_press:
+        if red_btn_state != red_btn_last_state and enough_time_since_last_press:
             red_btn_pressed()
         
         # Red button held: stop recording if it's a long press
-        if red_btn_state == 1 and red_btn_last_state == 1:
+        if red_btn_state == red_btn_last_state:
             button_press_duration = get_record_duration() - red_btn_press_timestamp
             if button_press_duration > LONG_PRESS_DURATION:
                 stop_recording()
