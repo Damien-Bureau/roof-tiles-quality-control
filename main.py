@@ -291,8 +291,10 @@ def check_microphone(stop_the_record: bool=True):
         if stop_the_record == True:
             try:
                 stop_recording(reason="microphone disconnected")
-            except NameError: # if it's not recording
-                pass
+                log_journalctl(message="Successfully stopped recording after mic disconnected", options=["-p", "debug"])
+            except Exception as e: # if it's not recording
+                log_journalctl(message=repr(e), options=["-p", "warning"])
+                log_journalctl(message="Failed to stop recording after mic disconnected", options=["-p", "debug"])
         last_screen_shown = False
         print(f"\rMicrophone not connected! {' '*100}\r", end="")
         while not(devices.is_microphone_connected()): # show animation on LED screen
@@ -334,10 +336,10 @@ def read_config():
             AMPLITUDE_THRESHOLD = float(parameters["threshold"])
             REC_DURATION = int(parameters["rec_duration_seconds"])
             SAMPLE_RATE = int(parameters["sample_rate_Hz"])
-            WAITING_DURATION = int(parameters["waiting_duration_seconds"])
-            LONG_PRESS_DURATION = int(parameters["long_press_duration_seconds"])
-            MINIMUM_TIME_GAP_BUTTONS = int(parameters["min_time_gap_between_2_button_presses_seconds"])
-            MINIMUM_TIME_GAP_BETWEEN_TWO_HITS = int(parameters["min_time_gap_between_2_hits_seconds"])
+            WAITING_DURATION = float(parameters["waiting_duration_seconds"])
+            LONG_PRESS_DURATION = float(parameters["long_press_duration_seconds"])
+            MINIMUM_TIME_GAP_BUTTONS = float(parameters["min_time_gap_between_2_button_presses_seconds"])
+            MINIMUM_TIME_GAP_BETWEEN_TWO_HITS = float(parameters["min_time_gap_between_2_hits_seconds"])
             MINIMUM_SAMPLE_GAP_BETWEEN_TWO_HITS = int(MINIMUM_TIME_GAP_BETWEEN_TWO_HITS * SAMPLE_RATE)
 
             print(green("done"))

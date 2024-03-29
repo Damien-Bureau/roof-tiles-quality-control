@@ -16,26 +16,26 @@ It can record audio and events such as buttons presses (as well as detected hamm
 <!-- TOC -->
 
 - [Introduction](#introduction)
-  - [Context](#context)
-  - [Table of Contents](#table-of-contents)
+    - [Context](#context)
+    - [Table of Contents](#table-of-contents)
 - [How to setup this project](#how-to-setup-this-project)
-  - [The hardware](#the-hardware)
-    - [Components](#components)
-    - [Wiring](#wiring)
-  - [Software configuration](#software-configuration)
-    - [Install Raspberry Pi OS Lite (64-bit)](#install-raspberry-pi-os-lite-64-bit)
-    - [Set up remote access via SSH](#set-up-remote-access-via-ssh)
-    - [Enable I2C](#enable-i2c)
-    - [Install Git](#install-git)
-    - [Get the project and the dependencies](#get-the-project-and-the-dependencies)
-    - [Setup the auto-run script](#setup-the-auto-run-script)
+    - [The hardware](#the-hardware)
+        - [Components](#components)
+        - [Wiring](#wiring)
+    - [Software configuration](#software-configuration)
+        - [Install Raspberry Pi OS Lite 64-bit](#install-raspberry-pi-os-lite-64-bit)
+        - [Set up remote access via SSH](#set-up-remote-access-via-ssh)
+        - [Enable I2C](#enable-i2c)
+        - [Install Git](#install-git)
+        - [Get the project and the dependencies](#get-the-project-and-the-dependencies)
+        - [Setup the auto-run script](#setup-the-auto-run-script)
 - [How to use this project](#how-to-use-this-project)
-  - [User feedback - LED screen](#user-feedback---led-screen)
-    - [Normal use](#normal-use)
-    - [Errors](#errors)
-  - [User input - push buttons](#user-input---push-buttons)
-  - [The output data](#the-output-data)
-  - [Custom settings](#custom-settings)
+    - [User feedback - LED screen](#user-feedback---led-screen)
+        - [Normal use](#normal-use)
+        - [Errors](#errors)
+    - [User input - push buttons](#user-input---push-buttons)
+    - [The output data](#the-output-data)
+    - [Custom settings](#custom-settings)
 
 <!-- /TOC -->
 
@@ -55,19 +55,23 @@ It can record audio and events such as buttons presses (as well as detected hamm
     - I’m also using a 18V AC phantom supply (the [MPS 500 Dual Phantom Supply](https://www.bax-shop.fr/alimentation-fantome/devine-mps-500-alimentation-fantome) from Devine)
     - 2 female male XLR cables (like [this one](https://www.bax-shop.fr/cables-xlr/devine-mic100-1-5-cable-micro-signal-xlr-1-5-metre))
     - a XLR to USB converter (I’m using the [MicCon interface XLR - USB](https://www.bax-shop.fr/carte-son-externe/devine-miccon-interface-xlr-usb) also from Devine)
-- 2 push buttons
-- a USB storage device (I’m using a classic USB stick)
+- 2 push buttons (and pull-down resistors, see [the wiring diagram](#wiring) for more info)
+- a USB storage device (a classic USB stick is perfectly fine)
 
 
 ### Wiring
 
-Connect the buttons to the Pi:
+Connect the [Raspberry Sense HAT](https://www.raspberrypi.com/products/sense-hat/) directly on the Pi.
+
+I used 2-pin buttons with 1kΩ pull-down resistor, following this wiring diagram:
+
 - `GPIO 38` → green button
 - `GPIO 40`→ red button
 
->I used 2-pin buttons with 1kΩ pull-down resistor, following this wiring diagram:
->
->![button wiring diagram](./images/button_wiring_diagram.drawio.png)
+![button wiring diagram](./images/button_wiring_diagram.drawio.png)
+
+This is what I did: <br>
+*photo du PCB avec les résistances et les jumpings wires*
 
 
 ---
@@ -85,10 +89,11 @@ Connect the buttons to the Pi:
 
 ### Set up remote access via SSH
 
-> For this part you will need a screen connected to your Pi
+> For this part you will need a screen and a keyboard connected to your Pi
 
-1. Connect the screen and power the Pi
-2. To find the IP address, run
+1. Connect the screen and the keyboard, and power the Pi
+2. Connect with your login and your password
+3. To find the IP address, run
     
     ```bash
     hostname -I
@@ -132,7 +137,7 @@ Connect the buttons to the Pi:
     > 2. Go to “Interface Options”
     > 3. Go to “SSH”
     > 4. Follow the instructions to enable SSH
-3. Check if you can access your Pi via SSH
+4. Check if you can access your Pi via SSH
     
     Open a terminal and run
     
@@ -253,7 +258,7 @@ Start by creating the script that will run [main.py](main.py)
 sudo nano /etc/systemd/system/run_recording_script.service
 ```
 Below a template for the content of the `.service` script. <br>
-Replace each `USERNAME` by yours and adapt the paths if needed. 
+**Replace each `USERNAME` by yours and adapt the paths if needed.**
 ```shell
 [Unit]
 Description=Run recording script
@@ -290,7 +295,7 @@ sudo chmod +x run_recording_script.service
 # Check permissions after
 ls -al run_recording_script.service # you should now see "-rwxr-xr-x"
 ```
-
+The project is now set up.
 
 
 ---
@@ -300,7 +305,7 @@ ls -al run_recording_script.service # you should now see "-rwxr-xr-x"
 
 ## User feedback - LED screen
 
-The Sense HAT's 8x8 LED matrix is used to five the user feedback on what is going on.
+The Sense HAT's 8x8 LED matrix is used to give the user a feedback on what is going on.
 
 ### Normal use
 There are two possible states.
@@ -320,18 +325,19 @@ There are two possible states.
     ![Red button pressed (red circle)](./images/led_images/red_circle.png)
 
     The project includes the audio detection of hammer hits: each time a hit is detected, the following image will appear on the screen, meaning that the device is waiting for the user to label the hit by pressing one of the buttons. <br>
-    ![Hit detected (empty circle)](./images/led_images/hit_detected.png)
+    ![Hit detected (empty circle)](./images/led_images/hit_detected.png) <br>
+    When nothing happens, the screen goes back to fully white after 5 seconds. A different value can be used, see [Custom settings](#custom-settings).
 
 
 ### Errors
-The device is designed to be foolproof and handles several edge case. <br>
-When a handled error occurs, an image representing the error will appear on the screen, flashing with a screen filled with red like this :
+The device is designed to be foolproof and handles several edge cases. <br>
+When a handled error occurs, an image representing the error will appear on the screen, flashing with a screen filled with red like this : <br>
 ![Fully red](./images/led_images/fully_red.png)
 
 - No microphone <br>
     ![No microphone](./images/led_images/no_mic_error.png) <br>
     This image on the screen means that no microphone is detected by the Python script. <br>
-    The way the microphone is detected is by using the [pyudev](https://pyudev.readthedocs.io/en/latest/index.html) library, in  this function definded in [devices.py](./devices.py):
+    The way the microphone is detected is by using the [pyudev](https://pyudev.readthedocs.io/en/latest/index.html) library, in  this function defined in [devices.py](./devices.py):
     ```python
     def is_microphone_connected():
         mic_name = "USB_PnP_Sound_Device" # to change if a different microphone is used
@@ -361,7 +367,7 @@ When a handled error occurs, an image representing the error will appear on the 
 - No storage device available
   
     ![No storage device](images/led_images/no_storage_error.png) <br>
-    With the [Raspberry Pi OS Lite](https://www.raspberrypi.com/software/operating-systems/#raspberry-pi-os-64-bit), the USB storage devices are not mounted automatically when plugged in, which means it's not possible to access the files. This is handled in [devices.py](./devices.py) by listening to udev events. <br>
+    With the [Raspberry Pi OS Lite](https://www.raspberrypi.com/software/operating-systems/#raspberry-pi-os-64-bit), the USB storage devices are not mounted automatically when plugged in, which means it's not possible to access the files. This is handled in [devices.py](./devices.py) by listening to udev events and mounting the device with commands, using the [subprocess](https://docs.python.org/3/library/subprocess.html) library. The storage device is also unmounted automatically. <br>
     If your USB storage device is not detected (the error on the screen keeps showing), try to unplugging it then plugging it again.
 
 
@@ -371,11 +377,18 @@ When a handled error occurs, an image representing the error will appear on the 
     If you see this image, it's probably because there is not enough space left on the storage device.
 
 
-- Those are the main edge cases. However, if you feel like the device is not responding at all, try to reboot the Pi and it should be fine. <br>
-    If you are working on the Pi and you don't want to reboot completely, you can use this command to restart only the Python script the same way it starts at boot:
-    ```bash
-    sudo systemctl restart run_recording_script.service
-    ```
+Those are the main edge cases. However, if you feel like the device is not responding at all, try to reboot the Pi and it should be fine. <br>
+If you are working on the Pi and you don't want to reboot completely, you can use this command to restart only the Python script the same way it starts at boot:
+```bash
+sudo systemctl restart run_recording_script.service
+```
+
+You can also check the journalctl, I added some logs (using the function `log_journalctl()` I made, defined in [shell_functions.py](./shell_functions.py)) when errors occurs. The logs appear either as errors (red), warnings (yellow) or debug messages (gray).
+
+```bash
+journalctl -f
+```
+
 
 ## User input - push buttons
 The box includes two push buttons, which are the main user input.
@@ -383,14 +396,23 @@ There are two ways to use the buttons : normal press and long press.
 
 >The duration of long press is 1.5 seconds by default, but it is possible to use a different value, see [Custom settings](#custom-settings).
 
-See the [Normal use section](#normal-use) to understand how to use the buttons.
+See the [Normal use](#normal-use) section to understand how to use the buttons.
 
 
 
 ## The output data
-Every record matches to an audio file and a csv file. They both have the name with the date and the time when the record started, for example `2024-03-19_14-33-52` `.csv` or `.wav`. <br>
+Every record matches to an audio file and a csv file. They both have the same name with the date and the time when the record started, for example `2024-03-19_14-33-52` `.csv` or `.wav`. <br>
 The csv file contains the events that happened during the record, and the timestamps are based on the same time reference as the audio file. <br>
-This is a visual representation of the output data you can get :
+
+List of possible events:
+- `on` = record started
+- `off` = record stopped
+- `hit` = hit detected (amplitude threshold)
+- `green` = green button pressed (rising edge)
+- `red` = red button pressed (rising edge)
+- `mic_error` = microphone disconnected
+
+This is a visual representation of the output data you can get : <br>
 ![Graph showing audio file and events](./images/20240220_15-34-11_audio_with_events_plot.png)
 The red and green dots are the buttons presses, and the transparent dots are the detected hammer hits.
 
@@ -400,14 +422,22 @@ The audio files are always the same duration, which is by default 60 seconds. Ne
 
 
 ## Custom settings
-Some settings can be customized. They are stored in the `config.csv` file on the storage device.
+Some settings can be customized. They are stored in the `config.csv` file on the storage device. Here's the list of all the settings :
 
-- The sample rate for the audio recording
-- The duration of the audio files (in seconds)
-- The hammer hit detection is made using a low-pass filter and an amplitude threshold. <br>
-  The cutoff frequency and the threshold can be changed.
+| Setting                                       | Description                                                                                              | Default value | Unit            | Format |
+|-------------------------------------------------|----------------------------------------------------------------------------------------------------------|---------------|-----------------|--------|
+| `sample_rate_Hz`                                | The sample rate of the audio recording                                                                   | 44100         | Hz              | int    |
+| `rec_duration_seconds`                          | The duration of the audio files                                                                          | 60            | seconds         | int    |
+| `cutoff_Hz`                                     | The cutoff frequency of the low-pass filter                                                              | 15000         | Hz              | int    |
+| `threshold`                                     | The amplitude threshold used for the hammer hit detection                                                | 0.3           | between 0 and 1 | float  |
+| `waiting_duration`                              | The time before the screen goes back to fully white when it's recording and nothing happens              | 5             | seconds         | float  |
+| `long_press_duration_seconds`                   | The duration threshold from which a button press is considered a long press                              | 1.5           | seconds         | float  |
+| `min_time_gap_between_2_button_presses_seconds` | If the time gap between 2 buttons presses is below this value, only one press will be taken into account | 0.1           | seconds         | float  |
+| `min_time_gap_between_2_hits_seconds`           | If the time gap between 2 hammer hits is below this value, only one hit will be taken into account       | 0.5           | seconds         | float  |
 
-Here's an example of the config file with the default values :
+
+
+Here's an example of the config file :
 ```
 device_name;Microphone (Realtek High Definition Audio)
 cutoff_Hz;1400
@@ -429,3 +459,5 @@ I also created the script [setup_audio_device.py](./setup_audio_device.py) which
 This script is not finished and could be improved a lot, but it's not the main focus of the project. It's more like a useful tool if you have to compare configurations with different microphone.
 
 >NB: the `device_name` property does not set the device used for recording on the Pi, which will always be *default*. This property is there for your information, so you know with which microphone you adjusted the parameters.
+
+Congrats, you made it to the end! Enjoy this project!
