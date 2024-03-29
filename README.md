@@ -11,31 +11,32 @@ It takes the form of a box which:
 
 It can record audio and events such as buttons presses (as well as detected hammer hits, which is specific to the context of the project).
 
-
 ## Table of Contents
 <!-- TOC -->
 
 - [Introduction](#introduction)
-    - [Context](#context)
-    - [Table of Contents](#table-of-contents)
+  - [Context](#context)
+  - [Table of Contents](#table-of-contents)
 - [How to setup this project](#how-to-setup-this-project)
-    - [The hardware](#the-hardware)
-        - [Components](#components)
-        - [Wiring](#wiring)
-    - [Software configuration](#software-configuration)
-        - [Install Raspberry Pi OS Lite 64-bit](#install-raspberry-pi-os-lite-64-bit)
-        - [Set up remote access via SSH](#set-up-remote-access-via-ssh)
-        - [Enable I2C](#enable-i2c)
-        - [Install Git](#install-git)
-        - [Get the project and the dependencies](#get-the-project-and-the-dependencies)
-        - [Setup the auto-run script](#setup-the-auto-run-script)
+  - [The hardware](#the-hardware)
+    - [Components](#components)
+    - [Wiring](#wiring)
+  - [Software configuration](#software-configuration)
+    - [Install Raspberry Pi OS Lite (64-bit)](#install-raspberry-pi-os-lite-64-bit)
+    - [Set up remote access via SSH](#set-up-remote-access-via-ssh)
+    - [Enable I2C](#enable-i2c)
+    - [Install Git](#install-git)
+    - [Get the project and the dependencies](#get-the-project-and-the-dependencies)
+    - [Setup the auto-run script](#setup-the-auto-run-script)
 - [How to use this project](#how-to-use-this-project)
-    - [User feedback - LED screen](#user-feedback---led-screen)
-        - [Normal use](#normal-use)
-        - [Errors](#errors)
-    - [User input - push buttons](#user-input---push-buttons)
-    - [The output data](#the-output-data)
-    - [Custom settings](#custom-settings)
+  - [User feedback - LED screen](#user-feedback---led-screen)
+    - [Normal use](#normal-use)
+    - [Errors](#errors)
+  - [User input - push buttons](#user-input---push-buttons)
+  - [The output data](#the-output-data)
+  - [Custom settings](#custom-settings)
+    - [Current parameters](#current-parameters)
+    - [Add your own parameters](#add-your-own-parameters)
 
 <!-- /TOC -->
 
@@ -65,16 +66,13 @@ Connect the [Raspberry Sense HAT](https://www.raspberrypi.com/products/sense-hat
 
 I used 2-pin buttons with 1kΩ pull-down resistor, following this wiring diagram:
 
-- `GPIO 38` → green button
-- `GPIO 40`→ red button
+- `GPIO 18` → green button
+- `GPIO 16`→ red button
 
 ![button wiring diagram](./images/button_wiring_diagram.drawio.png)
 
-This is what I did: <br>
-*photo du PCB avec les résistances et les jumpings wires*
 
-
----
+<br>
 
 
 ## Software configuration
@@ -234,6 +232,10 @@ python setup.py install
 Same for PortAudio, which is a dependency of [sounddevice](https://python-sounddevice.readthedocs.io/en/0.4.6/#), it needs manual operations
 
 ```bash
+# Download needed resources
+sudo apt-get install libasound2-dev
+git clone -b alsapatch https://github.com/gglockner/portaudio
+
 # Go to the portaudio folder
 cd
 cd roof-tiles-quality-control/portaudio
@@ -298,14 +300,16 @@ ls -al run_recording_script.service # you should now see "-rwxr-xr-x"
 The project is now set up.
 
 
----
+<br>
 
 
 # How to use this project
 
 ## User feedback - LED screen
 
-The Sense HAT's 8x8 LED matrix is used to give the user a feedback on what is going on.
+The Sense HAT's 8x8 LED matrix is here to give the user a feedback on what is going on.
+
+>If you need to change the rotation of the screen, you can do it in [led_display_functions.py](./led_display_functions.py) by changing the value of `sense.set_rotation(90)`.
 
 ### Normal use
 There are two possible states.
@@ -424,6 +428,7 @@ The audio files are always the same duration, which is by default 60 seconds. Ne
 ## Custom settings
 Some settings can be customized. They are stored in the `config.csv` file on the storage device. Here's the list of all the settings :
 
+### Current parameters
 | Setting                                       | Description                                                                                              | Default value | Unit            | Format |
 |-------------------------------------------------|----------------------------------------------------------------------------------------------------------|---------------|-----------------|--------|
 | `sample_rate_Hz`                                | The sample rate of the audio recording                                                                   | 44100         | Hz              | int    |
@@ -432,8 +437,8 @@ Some settings can be customized. They are stored in the `config.csv` file on the
 | `threshold`                                     | The amplitude threshold used for the hammer hit detection                                                | 0.3           | between 0 and 1 | float  |
 | `waiting_duration`                              | The time before the screen goes back to fully white when it's recording and nothing happens              | 5             | seconds         | float  |
 | `long_press_duration_seconds`                   | The duration threshold from which a button press is considered a long press                              | 1.5           | seconds         | float  |
-| `min_time_gap_between_2_button_presses_seconds` | If the time gap between 2 buttons presses is below this value, only one press will be taken into account | 0.1           | seconds         | float  |
-| `min_time_gap_between_2_hits_seconds`           | If the time gap between 2 hammer hits is below this value, only one hit will be taken into account       | 0.5           | seconds         | float  |
+| `min_time_gap_between_2_button_presses_seconds` | If the time gap between 2 buttons presses is below this value, only the first press will be taken into account | 0.1           | seconds         | float  |
+| `min_time_gap_between_2_hits_seconds`           | If the time gap between 2 hammer hits is below this value, only the first hit will be taken into account       | 0.5           | seconds         | float  |
 
 
 
@@ -460,4 +465,16 @@ This script is not finished and could be improved a lot, but it's not the main f
 
 >NB: the `device_name` property does not set the device used for recording on the Pi, which will always be *default*. This property is there for your information, so you know with which microphone you adjusted the parameters.
 
-Congrats, you made it to the end! Enjoy this project!
+
+
+### Add your own parameters
+If you want to add new parameters, you need to make the changes at 3 places (in [main.py](./main.py)) :
+
+- In `read_config()`
+  1. Define the default value
+  2. Define the data type of the value to be able to read it correctly
+- In `write_config_file_with_default_values()` <br>
+  Add a line for the new parameter
+
+<br>
+Congratulations, you made it to the end! Enjoy this project!

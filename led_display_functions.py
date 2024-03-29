@@ -10,6 +10,7 @@ WHITE_RGB = (255, 255, 255)
 sense = SenseHat()
 sense.clear()
 sense.low_light = True
+sense.set_rotation(90)
 
 
 def led_fully_white():

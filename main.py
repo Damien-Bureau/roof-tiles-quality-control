@@ -102,17 +102,17 @@ def write_config_file_with_default_values(config_file):
                 ["threshold", AMPLITUDE_THRESHOLD],
                 ["rec_duration_seconds", REC_DURATION],
                 ["sample_rate_Hz", SAMPLE_RATE],
-                ["waiting_duration", 5],
-                ["long_press_duration", 1.5],
-                ["min_time_gap_between_2_button_presses", 0.1],
-                ["min_time_gap_between_2_hits", 0.5]])
+                ["waiting_duration", WAITING_DURATION],
+                ["long_press_duration", LONG_PRESS_DURATION],
+                ["min_time_gap_between_2_button_presses", MINIMUM_TIME_GAP_BUTTONS],
+                ["min_time_gap_between_2_hits", MINIMUM_SAMPLE_GAP_BETWEEN_TWO_HITS]])
         print(green("done"))
         print_config(config_file, device_name, CUTOFF_FREQUENCY, AMPLITUDE_THRESHOLD, REC_DURATION, SAMPLE_RATE)
         return True
 
     except Exception as e: # device disconnected or no space left on device
         print(error("failed"))
-        log_journalctl(message=traceback.print_exc, options=["-p", "error"])
+        log_journalctl(message=repr(e), options=["-p", "error"])
         log_journalctl(message="Error while writing config file with default values", options=["-p", "debug"])
         error_while_writing_in_storage_device(stop_the_record=False)
         return None
@@ -463,8 +463,8 @@ samples_counter = 0
 
 ## BUTTONS
 GPIO.setmode(GPIO.BOARD)  # use physical pin numbering
-GREEN_BTN_PIN = 38
-RED_BTN_PIN = 40
+GREEN_BTN_PIN = 18
+RED_BTN_PIN = 16
 
 GPIO.setup(GREEN_BTN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 GPIO.setup(RED_BTN_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
